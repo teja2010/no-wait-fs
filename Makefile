@@ -7,5 +7,5 @@ all:
 	go install ./...
 
 clean:
-	rm  nwfs_client nwfs_back
+	rm -r bin/* pkg/*
 
