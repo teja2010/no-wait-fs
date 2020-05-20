@@ -1,0 +1,6 @@
+{
+	"Zk_servers" : ["127.0.0.1:6000"],
+	"Back_servers" : ["127.0.0.1:7000"],
+	"Periodic" : 10,
+	"File_size" : 1000
+}
