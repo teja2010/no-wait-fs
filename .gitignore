@@ -1,0 +1,16 @@
+*.swp
+.*
+nwfs_back
+nwfs_client
+
+#ignore pkg and bin
+bin/
+pkg/
+
+
+#cscope/
+cscope.*
+tags
+TAGS
+
+!.gitignore
