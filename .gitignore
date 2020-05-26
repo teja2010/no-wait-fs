@@ -6,6 +6,7 @@ nwfs_client
 #ignore pkg and bin
 bin/
 pkg/
+src/github.com/
 
 
 #cscope/
