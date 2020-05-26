@@ -52,7 +52,7 @@ type Fs_handle interface {
 	Write_meta(filename string, meta *Metadata) error
 	Read_lock(filename string) error
 	Read_unlock(filename string) error
-	//Close()
+	Close()
 }
 
 
@@ -135,6 +135,10 @@ func (f *fs_client) Read_lock(filename string) error {
 
 func (f *fs_client) Read_unlock(filename string) error {
 	return f.zk_rcu.Read_unlock()
+}
+
+func (f *fs_client)Close() {
+	f.zk_conn.Close()
 }
 
 // helpers
