@@ -5,6 +5,8 @@ all:
 	go env -w GOPATH=$(current_dir)
 	go env -w GOBIN=$(current_dir)/bin
 	go install ./...
+	go env -w GOPATH=$(HOME)
+	go env -w GOBIN=$(HOME)/go
 
 clean:
 	rm -r bin/* pkg/*
