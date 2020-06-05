@@ -4,6 +4,7 @@ import (
 	"os"
 	"fmt"
 	"net"
+	"log"
 	"errors"
 	"os/exec"
 	"net/rpc"
@@ -31,24 +32,26 @@ func main() {
 	port := args[0]
 	n := new(nwfs)
 
-	n.prefix = "shards_"+port
-	e := os.Mkdir(n.prefix, os.ModeDir)
-	if e != nil {
-		fmt.Println("Mkdir error", e)
+	n.prefix = "shards_"+port+"/"
+	e := os.Mkdir(n.prefix, os.ModePerm)
+	if os.IsExist(e) {
+		log.Println("Note:", e)
+	} else if e != nil {
+		log.Println("Mkdir error", e)
 		os.Exit(1)
 	}
 
-	rpc.RegisterName("No_Wait_FS server", n)
+	rpc.RegisterName("NWFS", n)
 	rpc.HandleHTTP()
 
 	l, e := net.Listen("tcp", ":" + port)
 	if e != nil {
-		fmt.Println("Listen error", e)
+		log.Println("Listen error", e)
 		os.Exit(1)
 	}
 	
 	if verbose_logs {
-		fmt.Println("Start serving")
+		log.Println("Start serving")
 	}
 
 	http.Serve(l, nil)
@@ -58,6 +61,7 @@ type nwfs struct {
 	prefix string
 	// nothing for now
 }
+
 
 type rpc_iface interface {
 	// write the shard contents to a localfile and return it's hash.
@@ -71,6 +75,10 @@ type rpc_iface interface {
 
 func (n *nwfs) WriteShard(contents []byte, hash *string) error {
 
+	if verbose_logs {
+		log.Println("WriteShard Entry:", contents, hash)
+	}
+
 	if len(contents) == 0 || hash == nil {
 		return errors.New("Invalid RPC args")
 	}
@@ -80,60 +88,68 @@ func (n *nwfs) WriteShard(contents []byte, hash *string) error {
 	filepath := n.prefix + *hash
 	exists, err := does_file_exist(filepath)
 	if err != nil {
-		fmt.Println("WriteShard failed", err)
+		log.Println("WriteShard failed", err)
 		return err
 	} else if exists == true {
-		fmt.Println("File exists.")
+		log.Println("File exists.")
 		return nil
 	}
 
 	err = ioutil.WriteFile(filepath, contents, 0644)
 	if err != nil {
-		fmt.Println("WriteShard failed", err)
+		log.Println("WriteShard failed", err)
 		return err
 	}
 
 	if success_logs {
-		fmt.Println("Writing", filepath, "successful")
+		log.Println("Writing", filepath, "successful")
 	}
 
 	return nil
 }
 
 type ReadArgs struct {
-	hash string
-	op []string // all gaps will be filled with the file path
+	Hash string
+	Op []string // all gaps will be filled with the file path
 		    // e.g. ["grep LOG", "| grep error"]
 		    //  runs: grep LOG <file_name> | grep error
 }
 
 func (n *nwfs) Read_op(args *ReadArgs, op_output *string) error {
-	filepath := n.prefix + args.hash
+
+	filepath := n.prefix + args.Hash
 	exists, err := does_file_exist(filepath)
 	if err != nil {
-		fmt.Println("Read_op failed", err)
+		log.Println("Read_op failed", err)
 		return err
 	}
 	if !exists {
-		fmt.Println("Read_op failed, file does not exist")
+		log.Println("Read_op failed, file does not exist")
 		return errors.New("File does not exist")
 	}
 
-	op := args.op[0]
-	for _, c := range args.op[1:] {
+	op := args.Op[0]
+	for _, c := range args.Op[1:] {
 		op = op + " " + filepath + " " + c
 	}
 
-	cmd := exec.Command("/bin/bash", "-c", op)
+	if verbose_logs {
+		log.Println("Read_op op:", op)
+	}
+
+	cmd := exec.Command("sh", "-c", op)
 	output, err := cmd.CombinedOutput()
+
+	// TODO: check if command ran but failed OR
+	//       the command did not run
 	if err != nil {
-		fmt.Println("Read_op failed", err)
-		return err
+		log.Println("Read_op failed", err)
+		return nil
 	}
 
 	if success_logs {
-		fmt.Println("Run op:", op)
-		fmt.Println("Output:", output)
+		log.Println("Run op:", op)
+		log.Println("Output:", output)
 	}
 
 	*op_output = string(output)

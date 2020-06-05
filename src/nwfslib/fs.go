@@ -1,7 +1,7 @@
 package nwfslib
 
 import (
-	//"errors"
+	"errors"
 	"log"
 	"time"
 	"math/rand"
@@ -11,14 +11,15 @@ import (
 )
 
 const (
-	NUM_BACK = 3
+	NUM_BACK = 1 // Not handling multiple replicas
 	SHARD_SIZE = 1024
 )
 
-type fs_client struct {
+type fs_client_rcu struct {
 	zk_servers []string
 	backends   []string
 	zk_conn    *go_zk.Conn
+
 	zk_rcu     zk_rculib.Zk_RCU_res
 }
 
@@ -28,22 +29,77 @@ type Metadata struct {
 	Backs [][]string
 }
 
-func Open(filepath string, zk_servers, backends []string) (Fs_handle, error) {
+func Open(filepath string, zk_servers, backends []string, locking string) (Fs_handle, error) {
 
-	var err error
-	f := new(fs_client)
-	f.zk_servers = append(f.zk_servers, zk_servers...)
-	f.backends = append(f.backends, backends...)
-	f.zk_conn, _, err = go_zk.Connect(zk_servers, 3*time.Second)
-	if err != nil {
-		return nil, err
-	}
-	f.zk_rcu, err = zk_rculib.Create_RCU_resource(filepath, f.zk_conn)
-	if err != nil {
-		return nil, err
+	switch locking {
+	case "RCU":
+		var err error
+		f := new(fs_client_rcu)
+		f.zk_servers = append(f.zk_servers, zk_servers...)
+		f.backends = append(f.backends, backends...)
+
+		f.zk_conn, _, err = go_zk.Connect(zk_servers, 3*time.Second)
+		if err != nil {
+			return nil, err
+		}
+
+		f.zk_rcu, err = zk_rculib.Create_RCU_resource(filepath, f.zk_conn)
+		if err != nil {
+			return nil, err
+		}
+		return f, nil
+	
+	case "NoLock":
+		var err error
+		f := new(fs_client_nolock)
+		f.zk_servers = append(f.zk_servers, zk_servers...)
+		f.backends = append(f.backends, backends...)
+
+		f.zk_conn, _, err = go_zk.Connect(zk_servers, 3*time.Second)
+		if err != nil {
+			return nil, err
+		}
+
+		f.nl, err = Create_no_lock_res(filepath, f.zk_conn)
+		if err != nil {
+			return nil, err
+		}
+		return f, nil
+	
+	case "SingleLock":
+		var err error
+		f := new(fs_client_singleLock)
+		f.zk_servers = append(f.zk_servers, zk_servers...)
+		f.backends = append(f.backends, backends...)
+		f.zk_conn, _, err = go_zk.Connect(zk_servers, 3*time.Second)
+		if err != nil {
+			return nil, err
+		}
+
+		f.lock, err = Create_single_lock_res(filepath, f.zk_conn)
+		if err != nil {
+			return nil, err
+		}
+		return f, nil
+
+	case "RWLock":
+		var err error
+		f := new(fs_client_rwlock)
+		f.zk_servers = append(f.zk_servers, zk_servers...)
+		f.backends = append(f.backends, backends...)
+		f.zk_conn, _, err = go_zk.Connect(zk_servers, 3*time.Second)
+		if err != nil {
+			return nil, err
+		}
+
+		f.rwl, err = Create_rw_lock_res(filepath, f.zk_conn)
+		if err != nil {
+			return nil, err
+		}
+		return f, nil
 	}
 
-	return f, nil
+	return nil, errors.New("Unknown lock config")
 }
 
 type Fs_handle interface {
@@ -56,7 +112,7 @@ type Fs_handle interface {
 }
 
 
-func (f *fs_client) Read_op(filename string, op []string) (string, error) {
+func (f *fs_client_rcu) Read_op(filename string, op []string) (string, error) {
 	meta_bytes, err := f.zk_rcu.Dereference()
 	if err != nil {
 		return "", err
@@ -72,7 +128,7 @@ func (f *fs_client) Read_op(filename string, op []string) (string, error) {
 	output := ""
 	for i, backs := range meta.Backs {
 		shard := meta.Shards[i]
-		c := nwfs_rpc_client{Backends: backs}
+		c := Nwfs_rpc_client{Backends: backs}
 
 		err := c.Connect()
 		if err != nil {
@@ -81,7 +137,7 @@ func (f *fs_client) Read_op(filename string, op []string) (string, error) {
 		defer c.Close()
 
 		op_output := ""
-		err = c.Read_op(&ReadArgs{hash: shard, op: op}, &op_output)
+		err = c.Read_op(&ReadArgs{Hash: shard, Op: op}, &op_output)
 		if err != nil {
 			return "", err
 		}
@@ -92,12 +148,12 @@ func (f *fs_client) Read_op(filename string, op []string) (string, error) {
 	return output, nil
 }
 
-func (f *fs_client) Write(filename string, contents []byte ) (*Metadata, error) {
+func (f *fs_client_rcu) Write(filename string, contents []byte ) (*Metadata, error) {
 
 	meta := new(Metadata)
 	for _, sh := range divide_into_shards(contents) {
 
-		c := nwfs_rpc_client{Backends: f.get_backends(NUM_BACK)}
+		c := Nwfs_rpc_client{Backends: get_backends(f.backends, NUM_BACK)}
 
 		err := c.Connect()
 		if err != nil {
@@ -118,7 +174,7 @@ func (f *fs_client) Write(filename string, contents []byte ) (*Metadata, error) 
 	return meta, nil
 }
 
-func (f *fs_client) Write_meta(filename string, meta *Metadata) error {
+func (f *fs_client_rcu) Write_meta(filename string, meta *Metadata) error {
 
 	meta_bytes, err := json.Marshal(meta)
 	if err != nil {
@@ -129,23 +185,26 @@ func (f *fs_client) Write_meta(filename string, meta *Metadata) error {
 	return f.zk_rcu.Assign(meta.Version, meta_bytes)
 }
 
-func (f *fs_client) Read_lock(filename string) error {
+func (f *fs_client_rcu) Read_lock(filename string) error {
 	return f.zk_rcu.Read_lock()
 }
 
-func (f *fs_client) Read_unlock(filename string) error {
+func (f *fs_client_rcu) Read_unlock(filename string) error {
 	return f.zk_rcu.Read_unlock()
 }
 
-func (f *fs_client)Close() {
+// can we reuse the same zookeeper connection for muliple files.
+// TODO remove Close
+func (f *fs_client_rcu)Close() {
+	if verbose_logs {
+		log.Println("Close the zookeeper connection")
+	}
 	f.zk_conn.Close()
 }
 
 // helpers
 // get a few backends to init
-func (f *fs_client) get_backends(num int) []string {
-	backs := make([]string,0)
-	backs = append(backs, f.backends...)
+func get_backends(backs []string, num int) []string {
 
 	back_num := len(backs)
 	chosen_backs := make([]string, num)
@@ -158,17 +217,5 @@ func (f *fs_client) get_backends(num int) []string {
 
 	return chosen_backs
 }
-func divide_into_shards(contents []byte) [][]byte {
-	shards := make([][]byte, 0)
-	for len(contents)>0 {
-		ll := SHARD_SIZE
-		if len(contents) < SHARD_SIZE {
-			ll = len(contents)
-		}
-		shards = append(shards, contents[:ll])
-		contents = contents[ll:]
-	}
 
-	return shards
-}
 

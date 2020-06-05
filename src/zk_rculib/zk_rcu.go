@@ -8,6 +8,10 @@ import (
 	go_zk "github.com/samuel/go-zookeeper/zk"
 )
 
+const (
+	verbose_logs = true
+)
+
 // the main recipe for a RCU sync on zookeeper
 // needs to be filled in.
 
@@ -25,22 +29,28 @@ type rcu_data struct {
 	wlock *go_zk.Lock
 }
 
-func latest_version(children []string) (int) {
+func latest_version(children []string) (int, string) {
 	version := -1
+	ret := ""
 	for _, ch := range children {
-		v, err := strconv.Atoi(strings.Trim(ch, "version"))
+		vstr := strings.Trim(ch, "version")
+		v, err := strconv.Atoi(vstr)
 		if err != nil {
 			continue
 		}
 		if v > version {
 			version = v
+			ret = vstr
 		}
 	}
 
-	return version
+	if verbose_logs {
+		log.Println("Latest Version ", ret)
+	}
+
+	return version, ret
 }
 
-// FIXME: use Multi
 func Create_RCU_resource(resource_name string,
 				zk *go_zk.Conn) (Zk_RCU_res, error) {
 	zk_rcu := new(rcu_data)
@@ -55,6 +65,9 @@ func Create_RCU_resource(resource_name string,
 		return nil, err
 	}
 	if res_exists {
+		if verbose_logs {
+			log.Println("Resource Exists")
+		}
 		return zk_rcu, nil
 	}
 
@@ -88,45 +101,13 @@ func Create_RCU_resource(resource_name string,
 	}
 
 	log.Println("Created RCU resource ", mresp[0].String)
-	log.Println("RCU res initial version", mresp[2].String)
+
+	if verbose_logs {
+		log.Println("RCU res initial version", mresp[2].String)
+	}
 
 	return zk_rcu, nil
 
-	//rs_exists, stat, err := zk.Exists("/"+resource_name)
-	//if err != nil {
-	//	return nil, err
-	//}
-	//if !rs_exists {
-	//	resrc_path, err = zk.Create("/"+resource_name, []byte{0}, 0, WorldACL(PermRead))
-	//	if err != nil {
-	//		return nil, err
-	//	}
-	//	log.Println("Created ", resrc_path)
-	//}
-
-	//children, _, err := zk.Children("/"+resource_name)
-	//if err != nil {
-	//	return nil, err
-	//}
-	//// atleast should have one version and writelock
-	//version_exists := (latest_version(children) >= 0)
-
-	//if !version_exists {
-	//	_, err = zk.Create("/"+resource_name+"/version", []byte{0},
-	//			   FlagSequence, WorldACL(PermAll))
-	//	if err != nil {
-	//		return nil, err
-	//	}
-	//}
-
-	////finally add the write lock folder
-	//_, err = zk.Create("/"+resource_name+"/writer_lock", []byte{0},
-	//		   FlagSequence, WorldACL(PermAll))
-	//if err != nil {
-	//	return nil, err
-	//}
-	//
-	//return zk_rcu, nil
 }
 
 func (zk_rcu *rcu_data) Read_lock() error {
@@ -140,25 +121,31 @@ func (zk_rcu *rcu_data) Read_lock() error {
 	if err != nil {
 		return err
 	}
-	latest := latest_version(children)
+	latest,lstr := latest_version(children)
 	if latest == 0 {
 		return errors.New("Resource is uninitialized.")
 	}
 
-	zk_rcu.rlock_file, err = zk.Create(("/" + zk_rcu.resource_name +
-						  "/version" +
-						  strconv.Itoa(latest) +
-						  "/readlock"),
-					     []byte{},
-					     go_zk.FlagSequence|go_zk.FlagEphemeral,
-					     go_zk.WorldACL(go_zk.PermAll))
+	path := ("/" + zk_rcu.resource_name + "/version" +
+			lstr + "/readlock" )
+
+	if verbose_logs {
+		log.Println("Read_lock path: ", path)
+	}
+
+	zk_rcu.rlock_file, err = zk.Create(path, []byte{},
+					   go_zk.FlagSequence|go_zk.FlagEphemeral,
+					   go_zk.WorldACL(go_zk.PermAll))
 
 	if err != nil {
 		zk_rcu.rlock_file = ""
 		return err
 	}
 
-	log.Println("Lock acquired: ", zk_rcu.rlock_file)
+	if verbose_logs {
+		log.Println("Lock acquired: ", zk_rcu.rlock_file)
+	}
+
 	return nil
 }
 
@@ -169,7 +156,18 @@ func (zk_rcu *rcu_data) Read_unlock() error {
 
 	zk := zk_rcu.Zk
 
-	return zk.Delete(zk_rcu.rlock_file, -1)
+	err := zk.Delete(zk_rcu.rlock_file, -1)
+	if verbose_logs {
+		if err != nil {
+			log.Println("Read_unlock", zk_rcu.rlock_file,
+					"Unsuccesful")
+		} else {
+			log.Println("Read_unlock", zk_rcu.rlock_file,
+					"Succesful")
+		}
+	}
+	zk_rcu.rlock_file = ""
+	return err
 }
 
 func (zk_rcu *rcu_data) Assign(version int, metadata []byte) error {
@@ -180,13 +178,16 @@ func (zk_rcu *rcu_data) Assign(version int, metadata []byte) error {
 	defer zk_rcu.writer_unlock()
 	zk := zk_rcu.Zk
 
+	if verbose_logs {
+		log.Println("Assign version:", version)
+	}
 
-	if version > 0 {
+	if version >= 0 {
 		children, _, err := zk.Children("/" + zk_rcu.resource_name)
 		if err != nil {
 			return err
 		}
-		latest := latest_version(children)
+		latest, _ := latest_version(children)
 
 		if latest != version {
 			return errors.New("Mismatching versions")
@@ -196,6 +197,11 @@ func (zk_rcu *rcu_data) Assign(version int, metadata []byte) error {
 	new_version, err := zk.Create("/" + zk_rcu.resource_name + "/version",
 					metadata, go_zk.FlagSequence,
 					go_zk.WorldACL(go_zk.PermAll))
+	if err != nil {
+		log.Println("Assign: Create failed err:", err)
+		return err
+	}
+
 	log.Println("Assigned metadata", metadata,
 		    ", Created ", new_version)
 	return nil
@@ -225,7 +231,4 @@ func (zk_rcu *rcu_data) writer_lock() error {
 func (zk_rcu *rcu_data) writer_unlock() error {
 	return zk_rcu.wlock.Unlock()
 }
-
-
-
 

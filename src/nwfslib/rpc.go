@@ -5,6 +5,10 @@ import (
 	"net/rpc"
 )
 
+const (
+	verbose_logs = true
+)
+
 
 //type rpc_iface interface {
 //	// write the shard contents to a localfile and return it's hash.
@@ -16,33 +20,42 @@ import (
 //	Read_op(args *ReadArgs, op_output *string) error
 //}
 
-type nwfs_rpc_client struct {
+type Nwfs_rpc_client struct {
 	Backends []string //array of len NUM_BACK
 	clients []*rpc.Client
 }
 
-func (nrc *nwfs_rpc_client) Connect() error {
+func (nrc *Nwfs_rpc_client) Connect() error {
+
+	nrc.clients = make([]*rpc.Client, len(nrc.Backends))
+
 	nrc.clients = make([]*rpc.Client, NUM_BACK)
-	for i:=0; i<NUM_BACK; i++ {
-		c, err := rpc.DialHTTP("tcp", nrc.Backends[i])
+	for i, b := range nrc.Backends {
+		c, err := rpc.DialHTTP("tcp", b)
 		if err != nil {
 			return err
 		}
-		nrc.clients = append(nrc.clients, c)
+		nrc.clients[i] = c
+	}
+	if verbose_logs {
+		log.Println("rpc Connect:", nrc.clients)
 	}
 	return nil
 }
 
-func (nrc *nwfs_rpc_client) WriteShard( contents []byte,
+func (nrc *Nwfs_rpc_client) WriteShard( contents []byte,
 					hash *string) (int, error) {
 	*hash = ""
 	errCnt := 0
+	var retErr error
 	for i:= 0; i<NUM_BACK; i++ {
 		chash := ""
 		c := nrc.clients[i]
-		err := c.Call("WriteShard", contents, &chash)
+		err := c.Call("NWFS.WriteShard", contents, &chash)
 		if err != nil {
+			log.Println("Write Failed")
 			errCnt++
+			retErr = err
 		}
 		if *hash == "" {
 			*hash = chash
@@ -51,24 +64,23 @@ func (nrc *nwfs_rpc_client) WriteShard( contents []byte,
 		}
 	}
 
-	return errCnt, nil
+	if errCnt > 0 {
+		return errCnt, retErr
+	} else {
+		return 0, nil
+	}
 }
 
-type ReadArgs struct {
-	hash string
-	op []string // all gaps will be filled with the file path
-		    // e.g. ["grep LOG", "| grep error"]
-		    //  runs: grep LOG <file_name> | grep error
-}
 
-func (nrc *nwfs_rpc_client) Read_op(args *ReadArgs,
+//type ReadArgs nwfslib.ReadArgs
+func (nrc *Nwfs_rpc_client) Read_op(args *ReadArgs,
 				    op_output *string) (error) {
 	var err error
 	*op_output = ""
 	for i:= 0; i<NUM_BACK; i++ {
 		out := ""
 		c := nrc.clients[i]
-		err = c.Call("WriteShard", args, &out)
+		err = c.Call("NWFS.Read_op", args, &out)
 		if err != nil {
 			continue
 		}
@@ -80,8 +92,8 @@ func (nrc *nwfs_rpc_client) Read_op(args *ReadArgs,
 	return err
 }
 
-func (nrc *nwfs_rpc_client) Close() {
-	for i:=0; i<NUM_BACK; i++ {
+func (nrc *Nwfs_rpc_client) Close() {
+	for i := range nrc.clients {
 		nrc.clients[i].Close()
 	}
 }

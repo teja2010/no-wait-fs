@@ -1,6 +1,23 @@
 {
-	"Zk_servers" : ["127.0.0.1:6000"],
+	"Zk_servers" : ["54.91.231.225:2181", "54.91.231.225:2191", "54.91.231.225:2171"],
 	"Back_servers" : ["127.0.0.1:7000"],
-	"Periodic" : 10,
-	"File_size" : 1000
+	"Periodic_ms" : 5000,
+	"File_size" : 1000,
+	"RW_ratio" : 10.0,
+
+	"Locking" : "SingleLock",
+	"Locking_Possible_Values" : "RCU, NoLock, SingleLock, RWLock",
+
+	"Read_ops" : [
+		["grep ", " hello|bye|goodbye|greeting|regards"],
+		["grep ", " yesterday|todat|day before|day after|tomorrow"]
+	],
+
+	"Write_ops" : [],
+
+
+	"IGNORE THE TESTS BELOW":"----------------------------------",
+	"Test_backend": false,
+	"Test_hello" : true
+
 }
