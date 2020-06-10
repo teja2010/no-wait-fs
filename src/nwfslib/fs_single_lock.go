@@ -82,7 +82,7 @@ func (fsl *fs_client_singleLock) Read_unlock(filename string) error {
 }
 
 func (fsl *fs_client_singleLock) Close() {
-	if verbose_logs {
+	if VERBOSE_LOGS {
 		log.Println("Close the zookeeper connection")
 	}
 	fsl.zk_conn.Close()

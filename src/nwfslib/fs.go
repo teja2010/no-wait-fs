@@ -3,6 +3,7 @@ package nwfslib
 import (
 	"errors"
 	"time"
+	"log"
 	go_zk "github.com/samuel/go-zookeeper/zk"
 	"zk_rculib"
 )
@@ -10,6 +11,8 @@ import (
 const (
 	NUM_BACK = 1 // Not handling multiple replicas
 	SHARD_SIZE = 1024
+	VERBOSE_LOGS = true
+	ENTRY_ARG_LOGS = true
 )
 
 type fs_client_rcu struct {
@@ -27,6 +30,10 @@ type Metadata struct {
 }
 
 func Open(filepath string, zk_servers, backends []string, locking string) (Fs_handle, error) {
+
+	if ENTRY_ARG_LOGS {
+		log.Println(__FUNC__(), filepath, locking)
+	}
 
 	switch locking {
 	case "RCU":

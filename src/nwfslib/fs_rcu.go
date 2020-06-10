@@ -45,7 +45,7 @@ func (f *fs_client_rcu) Read_unlock(filename string) error {
 // can we reuse the same zookeeper connection for muliple files.
 // TODO remove Close
 func (f *fs_client_rcu)Close() {
-	if verbose_logs {
+	if VERBOSE_LOGS {
 		log.Println("Close the zookeeper connection")
 	}
 	f.zk_conn.Close()

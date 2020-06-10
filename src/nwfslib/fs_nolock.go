@@ -36,10 +36,6 @@ func (fnl *fs_client_nolock) Read_op(filename string, op []string) (string, erro
 		return "", err
 	}
 
-	if verbose_logs {
-		log.Println("meta_bytes: ", meta_bytes)
-	}
-
 	return Read_op(meta_bytes, op)
 }
 func (fnl *fs_client_nolock) Write(filename string, contents []byte) (*Metadata, error) {
@@ -53,8 +49,8 @@ func (fnl *fs_client_nolock) Write_meta(filename string, meta *Metadata) error {
 		return err
 	}
 
-	if verbose_logs {
-		log.Println("meta_bytes: ", meta_bytes)
+	if VERBOSE_LOGS {
+		log.Println(__FUNC__(), "meta_bytes: ", meta_bytes)
 	}
 
 	path := "/" + filename + "/nolock_data"
@@ -79,7 +75,7 @@ func (fnl *fs_client_nolock) Read_unlock(filename string) error {
 	return nil
 }
 func (fnl *fs_client_nolock) Close() {
-	if verbose_logs {
+	if VERBOSE_LOGS {
 		log.Println("Close the zookeeper connection")
 	}
 	fnl.zk_conn.Close()

@@ -39,11 +39,11 @@ func (frwl *fs_client_rwlock) Read_op(filename string, op []string) (string, err
 }
 
 func (frwl *fs_client_rwlock) Write(filename string, contents []byte) (*Metadata, error) {
-	frwl.rwl.WriteLock()
 	return write_shards(filename, contents, frwl.backends)
 }
 
 func (frwl *fs_client_rwlock) Write_meta(filename string, meta *Metadata) error {
+	frwl.rwl.WriteLock()
 	defer frwl.rwl.WriteUnlock()
 
 	meta_bytes, err := json.Marshal(meta)
@@ -65,5 +65,8 @@ func (frwl *fs_client_rwlock) Read_unlock(filename string) error {
 }
 
 func (frwl *fs_client_rwlock) Close() {
+	if VERBOSE_LOGS {
+		log.Println("Close the zookeeper connection")
+	}
 	frwl.zk_conn.Close()
 }

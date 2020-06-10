@@ -3,6 +3,7 @@ package nwfslib
 // common functions needed by both the server and the client
 import (
 	"fmt"
+	"runtime"
 	"log"
 	"crypto/sha256"
 	"math/rand"
@@ -37,6 +38,10 @@ func divide_into_shards(contents []byte) [][]byte {
 		contents = contents[ll:]
 	}
 
+	if VERBOSE_LOGS {
+		log.Println(__FUNC__(), len(shards), "shards created")
+	}
+
 	return shards
 }
 
@@ -63,6 +68,10 @@ func write_shards(filename string, contents []byte, backends []string) (*Metadat
 		meta.Backs = append(meta.Backs, c.Backends)
 	}
 
+	if VERBOSE_LOGS {
+		log.Println(__FUNC__(), filename, "metadata:", meta)
+	}
+
 	return meta, nil
 }
 
@@ -81,6 +90,10 @@ func get_backends(backs []string, num int) []string {
 }
 
 func Read_op(meta_bytes []byte, op []string) (string, error) {
+
+	if ENTRY_ARG_LOGS {
+		log.Println(__FUNC__(), op)
+	}
 
 	var meta Metadata
 	err := json.Unmarshal(meta_bytes, &meta)
@@ -109,5 +122,25 @@ func Read_op(meta_bytes []byte, op []string) (string, error) {
 		output += op_output
 	}
 
+	if VERBOSE_LOGS {
+		if len(output) < 1000 {
+			log.Println(__FUNC__(), "output:", output)
+		} else {
+			log.Println(__FUNC__(), "truncated output:", output[:200])
+		}
+	}
+
 	return output, nil
+}
+
+/* get the function name
+ * from  https://stackoverflow.com/questions/25927660/how-to-get-the-current-function-name/46289376#46289376
+ */
+func __FUNC__() string {
+
+	pc := make([]uintptr, 15)
+	n := runtime.Callers(2, pc)
+	frames := runtime.CallersFrames(pc[:n])
+	frame, _ := frames.Next()
+	return frame.Function + "():"
 }

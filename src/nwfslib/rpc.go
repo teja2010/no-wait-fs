@@ -5,10 +5,6 @@ import (
 	"net/rpc"
 )
 
-const (
-	verbose_logs = true
-)
-
 
 //type rpc_iface interface {
 //	// write the shard contents to a localfile and return it's hash.
@@ -37,7 +33,7 @@ func (nrc *Nwfs_rpc_client) Connect() error {
 		}
 		nrc.clients[i] = c
 	}
-	if verbose_logs {
+	if VERBOSE_LOGS {
 		log.Println("rpc Connect:", nrc.clients)
 	}
 	return nil
@@ -67,6 +63,13 @@ func (nrc *Nwfs_rpc_client) WriteShard( contents []byte,
 	if errCnt > 0 {
 		return errCnt, retErr
 	} else {
+		if VERBOSE_LOGS {
+			if len(contents) < 10 {
+				log.Println(__FUNC__(), hash, "|", contents)
+			} else {
+				log.Println(__FUNC__(), hash, "|truncated", contents[:20])
+			}
+		}
 		return 0, nil
 	}
 }
