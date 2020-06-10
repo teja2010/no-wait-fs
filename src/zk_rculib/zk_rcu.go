@@ -18,7 +18,7 @@ const (
 type Zk_RCU_res interface {
 	Read_lock() error
 	Read_unlock() error
-	Assign(version int, metadata []byte) error
+	Assign(version int32, metadata []byte) error
 	Dereference() ([]byte, error)
 }
 
@@ -33,7 +33,7 @@ func latest_version(children []string) (int, string) {
 	version := -1
 	ret := ""
 	for _, ch := range children {
-		vstr := strings.Trim(ch, "version")
+		vstr := strings.TrimPrefix(ch, "version")
 		v, err := strconv.Atoi(vstr)
 		if err != nil {
 			continue
@@ -170,7 +170,7 @@ func (zk_rcu *rcu_data) Read_unlock() error {
 	return err
 }
 
-func (zk_rcu *rcu_data) Assign(version int, metadata []byte) error {
+func (zk_rcu *rcu_data) Assign(version int32, metadata []byte) error {
 	err := zk_rcu.writer_lock()
 	if err != nil {
 		return err
@@ -189,7 +189,7 @@ func (zk_rcu *rcu_data) Assign(version int, metadata []byte) error {
 		}
 		latest, _ := latest_version(children)
 
-		if latest != version {
+		if int32(latest) != version {
 			return errors.New("Mismatching versions")
 		}
 	}

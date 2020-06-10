@@ -38,59 +38,11 @@ func (fsl *fs_client_singleLock) Read_op(filename string, op []string) (string, 
 		return "", err
 	}
 
-	var meta Metadata
-	err = json.Unmarshal(meta_bytes, &meta)
-	if err != nil {
-		log.Println("json.Unmarshal failed: ", err)
-		return "", err
-	}
-
-	output := ""
-	for i, backs := range meta.Backs {
-		shard := meta.Shards[i]
-		c := Nwfs_rpc_client{Backends: backs}
-
-		err := c.Connect()
-		if err != nil {
-			return "", err
-		}
-		defer c.Close()
-
-		op_output := ""
-		err = c.Read_op(&ReadArgs{Hash: shard, Op: op}, &op_output)
-		if err != nil {
-			return "", err
-		}
-		
-		output += op_output
-	}
-
-	return output, nil
+	return Read_op(meta_bytes, op)
 }
 
 func (fsl *fs_client_singleLock) Write(filename string, contents []byte) (*Metadata, error) {
-	meta := new(Metadata)
-
-	for _, sh := range divide_into_shards(contents) {
-		c := Nwfs_rpc_client{Backends: get_backends(fsl.backends, NUM_BACK)}
-
-		err := c.Connect()
-		if err != nil {
-			return nil, err
-		}
-		defer c.Close()
-
-		hash := ""
-		_, err = c.WriteShard(sh, &hash)
-		if err != nil {
-			return nil, err
-		}
-
-		meta.Shards = append(meta.Shards, hash)
-		meta.Backs = append(meta.Backs, c.Backends)
-	}
-
-	return meta, nil
+	return write_shards(filename, contents, fsl.backends)
 }
 
 func (fsl *fs_client_singleLock) Write_meta(filename string, meta *Metadata) error {

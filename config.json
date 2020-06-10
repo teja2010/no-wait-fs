@@ -1,11 +1,11 @@
 {
-	"Zk_servers" : ["54.91.231.225:2181", "54.91.231.225:2191", "54.91.231.225:2171"],
+	"Zk_servers" : ["127.0.0.1:2181", "127.0.0.1:2191", "127.0.0.1:2171"],
 	"Back_servers" : ["127.0.0.1:7000"],
 	"Periodic_ms" : 5000,
 	"File_size" : 1000,
 	"RW_ratio" : 10.0,
 
-	"Locking" : "SingleLock",
+	"Locking" : "RWLock",
 	"Locking_Possible_Values" : "RCU, NoLock, SingleLock, RWLock",
 
 	"Read_ops" : [

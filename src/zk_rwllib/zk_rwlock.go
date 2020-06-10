@@ -2,6 +2,9 @@ package zk_rwllib
 
 import (
 	"log"
+	"errors"
+	"strconv"
+	"strings"
 	go_zk "github.com/samuel/go-zookeeper/zk"
 )
 
@@ -15,7 +18,8 @@ type Zk_RWLock interface {
 
 type rwlock struct {
 	path string
-	zk *go_zk.Conn
+	myseq int
+	Zk *go_zk.Conn
 
 	lock_file string
 }
@@ -23,6 +27,8 @@ type rwlock struct {
 func Create_RWLock(filepath string, zk *go_zk.Conn) (Zk_RWLock, error) {
 
 	rw := new(rwlock)
+	rw.path = filepath
+	rw.Zk = zk
 
 	log.Println("Created rwlock at ", filepath)
 
@@ -30,14 +36,129 @@ func Create_RWLock(filepath string, zk *go_zk.Conn) (Zk_RWLock, error) {
 }
 
 func (rw *rwlock) ReadLock() error {
-	return nil
+	if rw.lock_file != "" {
+		return errors.New("Deadlock: lock acquired: " + rw.lock_file);
+	}
+	var err error
+	zk := rw.Zk
+
+	rw.lock_file , err = zk.Create("/" + rw.path + "/reader", []byte{},
+					go_zk.FlagSequence | go_zk.FlagEphemeral,
+					go_zk.WorldACL(go_zk.PermAll))
+	if err != nil {
+		return err
+	}
+
+	splits := strings.Split(rw.lock_file, "/")
+	lk_filename := splits[len(splits)-1]
+	rw.myseq, err = strconv.Atoi(strings.Trim(lk_filename, "reader"))
+	if err != nil {
+		log.Println("Unable to extract sequence num")
+		return err
+	}
+
+	err = rw.wait_for("writer")
+	return err
 }
+
 func (rw *rwlock) ReadUnlock() error {
-	return nil
+
+	zk := rw.Zk
+	err := zk.Delete(rw.lock_file, -1)
+	rw.lock_file = ""
+	return err
 }
 func (rw *rwlock) WriteLock() error {
-	return nil
+	zk := rw.Zk
+
+	var err error
+	rw.lock_file, err = zk.Create("/" + rw.path + "/writer", []byte{},
+					go_zk.FlagSequence | go_zk.FlagEphemeral,
+					go_zk.WorldACL(go_zk.PermAll))
+	if err != nil {
+		return err
+	}
+
+	splits := strings.Split(rw.lock_file, "/")
+	lk_filename := splits[len(splits)-1]
+	rw.myseq, err = strconv.Atoi(strings.Trim(lk_filename, "writer"))
+	if err != nil {
+		log.Println("Unable to extract sequence num")
+		return err
+	}
+
+	err = rw.wait_for("writer") // wait till we are the latest writer
+	if err != nil {
+		return err
+	}
+
+	err = rw.wait_for("reader") // wait for other readers to complete
+	return err
 }
+
 func (rw *rwlock) WriteUnlock() error {
-	return nil
+	zk := rw.Zk
+	err := zk.Delete(rw.lock_file, -1)
+	rw.lock_file = ""
+
+	return err
+}
+
+func (rw *rwlock) wait_for(node_type string) error {
+	zk := rw.Zk
+
+	if node_type != "writer" && node_type != "reader" {
+		return errors.New("Unknown "+node_type)
+	}
+
+	for {
+		children, _, err := zk.Children("/"+ rw.path)
+		if err != nil {
+			return err
+		}
+
+		prev := "";
+		ver := -1
+
+		// ver is the node just before self
+		// i.e. v < myseq
+
+		for _, ch := range children {
+			v, err := strconv.Atoi(strings.TrimPrefix(ch, node_type))
+			if err != nil {
+				continue
+			}
+			if v < rw.myseq {
+				if ver == -1 {
+					ver = v
+					prev = ch
+
+				// myseq < v < ver
+				} else if ver < v {
+					ver = v
+					prev = ch
+				}
+			}
+		}
+		if prev == "" { // no one before you
+			return nil
+		}
+		rw.__wait_for_node(prev)
+	}
+
+}
+
+func (rw *rwlock) __wait_for_node(name string) {
+
+	zk := rw.Zk
+	exists, _, watch_chan, err  := zk.ExistsW("/" + rw.path + "/" + name)
+	if !exists || err != nil {
+		return
+	}
+
+	ev := <-watch_chan
+	if ev.Err != nil {
+		return
+	}
+	//TODO: check if ev.Event is EventNodeDeleted
 }

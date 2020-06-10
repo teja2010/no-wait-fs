@@ -2,12 +2,9 @@ package nwfslib
 
 import (
 	"errors"
-	"log"
 	"time"
-	"math/rand"
 	go_zk "github.com/samuel/go-zookeeper/zk"
 	"zk_rculib"
-	"encoding/json"
 )
 
 const (
@@ -24,7 +21,7 @@ type fs_client_rcu struct {
 }
 
 type Metadata struct {
-	Version int
+	Version int32
 	Shards []string
 	Backs [][]string
 }
@@ -112,110 +109,5 @@ type Fs_handle interface {
 }
 
 
-func (f *fs_client_rcu) Read_op(filename string, op []string) (string, error) {
-	meta_bytes, err := f.zk_rcu.Dereference()
-	if err != nil {
-		return "", err
-	}
-
-	var meta Metadata
-	err = json.Unmarshal(meta_bytes, &meta)
-	if err != nil {
-		log.Println("json.Unmarshal failed: ", err)
-		return "", err
-	}
-
-	output := ""
-	for i, backs := range meta.Backs {
-		shard := meta.Shards[i]
-		c := Nwfs_rpc_client{Backends: backs}
-
-		err := c.Connect()
-		if err != nil {
-			return "", err
-		}
-		defer c.Close()
-
-		op_output := ""
-		err = c.Read_op(&ReadArgs{Hash: shard, Op: op}, &op_output)
-		if err != nil {
-			return "", err
-		}
-		
-		output += op_output
-	}
-
-	return output, nil
-}
-
-func (f *fs_client_rcu) Write(filename string, contents []byte ) (*Metadata, error) {
-
-	meta := new(Metadata)
-	for _, sh := range divide_into_shards(contents) {
-
-		c := Nwfs_rpc_client{Backends: get_backends(f.backends, NUM_BACK)}
-
-		err := c.Connect()
-		if err != nil {
-			return nil, err
-		}
-		defer c.Close()
-
-		hash := ""
-		_, err = c.WriteShard(sh, &hash)
-		if err != nil {
-			return nil, err
-		}
-
-		meta.Shards = append(meta.Shards, hash)
-		meta.Backs = append(meta.Backs, c.Backends)
-	}
-
-	return meta, nil
-}
-
-func (f *fs_client_rcu) Write_meta(filename string, meta *Metadata) error {
-
-	meta_bytes, err := json.Marshal(meta)
-	if err != nil {
-		log.Println("json.Marshal failed: ", err)
-		return err
-	}
-
-	return f.zk_rcu.Assign(meta.Version, meta_bytes)
-}
-
-func (f *fs_client_rcu) Read_lock(filename string) error {
-	return f.zk_rcu.Read_lock()
-}
-
-func (f *fs_client_rcu) Read_unlock(filename string) error {
-	return f.zk_rcu.Read_unlock()
-}
-
-// can we reuse the same zookeeper connection for muliple files.
-// TODO remove Close
-func (f *fs_client_rcu)Close() {
-	if verbose_logs {
-		log.Println("Close the zookeeper connection")
-	}
-	f.zk_conn.Close()
-}
-
-// helpers
-// get a few backends to init
-func get_backends(backs []string, num int) []string {
-
-	back_num := len(backs)
-	chosen_backs := make([]string, num)
-
-	for i:=0; i<num; i++ {
-		choose := rand.Intn(back_num-i)
-		chosen_backs[i] = backs[i+choose]
-		backs[choose] = backs[i]
-	}
-
-	return chosen_backs
-}
 
 
