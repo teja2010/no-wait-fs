@@ -430,6 +430,11 @@ func (c *Config) rand_rw_bench() {
 
 	start := time.Now()
 	for i, op := range rw_arr {
+		fmt.Printf("%c",op)
+		if i%50 == 49 {
+			fmt.Println(i+1)
+		}
+
 		if op == 'w' {
 			meta, err := fs.Write(filename, []byte(hello_lyrics))
 			if err != nil {
@@ -448,16 +453,14 @@ func (c *Config) rand_rw_bench() {
 
 		} else if op == 'r' {
 
-			err = fs.Read_lock(filename)
-			if err != nil {
-				log.Println("Read_lock Failed :", err)
-				return
+			if ((i > 0 && rw_arr[i-1] != 'r') || (i == 0)){
+				err = fs.Read_lock(filename)
+				if err != nil {
+					log.Println("Read_lock Failed :", err)
+					return
+				}
 			}
 
-			fmt.Printf(".")
-			if i%50 == 49 {
-				fmt.Println(i+1)
-			}
 
 			_, err := fs.Read_op(filename,
 						[]string{"grep -i hello ", " "})
@@ -467,14 +470,18 @@ func (c *Config) rand_rw_bench() {
 			}
 			//last_read_ver = meta.Version
 
-			err = fs.Read_unlock(filename)
-			if err != nil {
-				log.Println("Read_lock Failed :", err)
-				return
+			if ((i+1 < BENCH_LOOP_LEN && rw_arr[i+1] != 'r') ||
+			    (i == BENCH_LOOP_LEN)) {
+				err = fs.Read_unlock(filename)
+				if err != nil {
+					log.Println("Read_lock Failed :", err)
+					return
+				}
 			}
 		}
 	}
 	elapsed := time.Now().Sub(start)
 	log.Println("Random RW:", elapsed, "/", BENCH_LOOP_LEN, " iters")
 
+	fs.Close()
 }
