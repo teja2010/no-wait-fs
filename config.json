@@ -5,6 +5,7 @@
 	"File_size" : 1000,
 
 	"Read_prob" : 0.1,
+	"Threads_num" : 4,
 
 	"Locking" : "RCU",
 	"Locking_Possible_Values" : "RCU, NoLock, SingleLock, RWLock",

@@ -1,7 +1,7 @@
 *.swp
 .*
-nwfs_back
-nwfs_client
+bin/nwfs_back
+bin/nwfs_client
 
 #ignore pkg and bin
 bin/
