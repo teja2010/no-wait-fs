@@ -5,7 +5,7 @@
 	"File_size" : 1000,
 	"RW_ratio" : 10.0,
 
-	"Locking" : "RWLock",
+	"Locking" : "RCU",
 	"Locking_Possible_Values" : "RCU, NoLock, SingleLock, RWLock",
 
 	"Read_ops" : [
@@ -17,7 +17,11 @@
 
 
 	"IGNORE THE TESTS BELOW":"----------------------------------",
-	"Test_backend": false,
-	"Test_hello" : true
+	"Test_backend":          false,
+	"Test_hello" :           true ,
+	"Test_benchmark_reads" : true ,
+	"Test_backend_bench" :   true ,
+
+	"IGNORE": "------------------------------------------------"
 
 }

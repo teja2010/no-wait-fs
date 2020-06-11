@@ -39,7 +39,7 @@ func (frwl *fs_client_rwlock) Read_op(filename string, op []string) (string, err
 }
 
 func (frwl *fs_client_rwlock) Write(filename string, contents []byte) (*Metadata, error) {
-	return write_shards(filename, contents, frwl.backends)
+	return Write_shards(filename, contents, frwl.backends)
 }
 
 func (frwl *fs_client_rwlock) Write_meta(filename string, meta *Metadata) error {

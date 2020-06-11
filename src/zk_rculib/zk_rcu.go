@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	verbose_logs = true
+	VERBOSE_LOGS = false
 )
 
 // the main recipe for a RCU sync on zookeeper
@@ -44,7 +44,7 @@ func latest_version(children []string) (int, string) {
 		}
 	}
 
-	if verbose_logs {
+	if VERBOSE_LOGS {
 		log.Println("Latest Version ", ret)
 	}
 
@@ -65,7 +65,7 @@ func Create_RCU_resource(resource_name string,
 		return nil, err
 	}
 	if res_exists {
-		if verbose_logs {
+		if VERBOSE_LOGS {
 			log.Println("Resource Exists")
 		}
 		return zk_rcu, nil
@@ -102,7 +102,7 @@ func Create_RCU_resource(resource_name string,
 
 	log.Println("Created RCU resource ", mresp[0].String)
 
-	if verbose_logs {
+	if VERBOSE_LOGS {
 		log.Println("RCU res initial version", mresp[2].String)
 	}
 
@@ -129,7 +129,7 @@ func (zk_rcu *rcu_data) Read_lock() error {
 	path := ("/" + zk_rcu.resource_name + "/version" +
 			lstr + "/readlock" )
 
-	if verbose_logs {
+	if VERBOSE_LOGS {
 		log.Println("Read_lock path: ", path)
 	}
 
@@ -142,7 +142,7 @@ func (zk_rcu *rcu_data) Read_lock() error {
 		return err
 	}
 
-	if verbose_logs {
+	if VERBOSE_LOGS {
 		log.Println("Lock acquired: ", zk_rcu.rlock_file)
 	}
 
@@ -157,7 +157,7 @@ func (zk_rcu *rcu_data) Read_unlock() error {
 	zk := zk_rcu.Zk
 
 	err := zk.Delete(zk_rcu.rlock_file, -1)
-	if verbose_logs {
+	if VERBOSE_LOGS {
 		if err != nil {
 			log.Println("Read_unlock", zk_rcu.rlock_file,
 					"Unsuccesful")
@@ -178,7 +178,7 @@ func (zk_rcu *rcu_data) Assign(version int32, metadata []byte) error {
 	defer zk_rcu.writer_unlock()
 	zk := zk_rcu.Zk
 
-	if verbose_logs {
+	if VERBOSE_LOGS {
 		log.Println("Assign version:", version)
 	}
 
@@ -202,8 +202,10 @@ func (zk_rcu *rcu_data) Assign(version int32, metadata []byte) error {
 		return err
 	}
 
-	log.Println("Assigned metadata", metadata,
-		    ", Created ", new_version)
+	if VERBOSE_LOGS {
+		log.Println("Assigned metadata", metadata,
+			    ", Created ", new_version)
+	}
 	return nil
 }
 
@@ -218,8 +220,10 @@ func (zk_rcu *rcu_data) Dereference() ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	log.Println("Dereferenced", zk_rcu.rlock_file[:idx],
-		    ", Metadata", metadata)
+	if VERBOSE_LOGS {
+		log.Println("Dereferenced", zk_rcu.rlock_file[:idx],
+			    ", Metadata", metadata)
+	}
 	return metadata, nil
 }
 

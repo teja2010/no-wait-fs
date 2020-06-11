@@ -14,8 +14,8 @@ import (
 )
 
 const (
-	verbose_logs = true
-	success_logs = true
+	verbose_logs = false
+	success_logs = false
 )
 
 func print_help() {
@@ -103,6 +103,8 @@ func (n *nwfs) WriteShard(contents []byte, hash *string) error {
 
 	if success_logs {
 		log.Println("Writing", filepath, "successful")
+	} else {
+		fmt.Printf("r")
 	}
 
 	return nil
@@ -150,6 +152,8 @@ func (n *nwfs) Read_op(args *ReadArgs, op_output *string) error {
 	if success_logs {
 		log.Println("Run op:", op)
 		log.Println("Output:", output)
+	} else {
+		fmt.Printf("r")
 	}
 
 	*op_output = string(output)

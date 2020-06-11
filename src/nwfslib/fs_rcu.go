@@ -20,7 +20,7 @@ func (f *fs_client_rcu) Read_op(filename string, op []string) (string, error) {
 }
 
 func (f *fs_client_rcu) Write(filename string, contents []byte ) (*Metadata, error) {
-	return write_shards(filename, contents, f.backends)
+	return Write_shards(filename, contents, f.backends)
 }
 
 func (f *fs_client_rcu) Write_meta(filename string, meta *Metadata) error {

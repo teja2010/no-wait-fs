@@ -11,8 +11,8 @@ import (
 const (
 	NUM_BACK = 1 // Not handling multiple replicas
 	SHARD_SIZE = 1024
-	VERBOSE_LOGS = true
-	ENTRY_ARG_LOGS = true
+	VERBOSE_LOGS = false
+	ENTRY_ARG_LOGS = false
 )
 
 type fs_client_rcu struct {

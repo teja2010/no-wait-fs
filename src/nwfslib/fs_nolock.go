@@ -39,7 +39,7 @@ func (fnl *fs_client_nolock) Read_op(filename string, op []string) (string, erro
 	return Read_op(meta_bytes, op)
 }
 func (fnl *fs_client_nolock) Write(filename string, contents []byte) (*Metadata, error) {
-	return write_shards(filename, contents, fnl.backends)
+	return Write_shards(filename, contents, fnl.backends)
 }
 func (fnl *fs_client_nolock) Write_meta(filename string, meta *Metadata) error {
 	zk := fnl.zk_conn

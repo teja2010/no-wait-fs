@@ -27,7 +27,7 @@ func Shard_hash(input []byte) string {
 	return string(out)
 }
 
-func divide_into_shards(contents []byte) [][]byte {
+func Divide_into_shards(contents []byte) [][]byte {
 	shards := make([][]byte, 0)
 	for len(contents)>0 {
 		ll := SHARD_SIZE
@@ -45,10 +45,10 @@ func divide_into_shards(contents []byte) [][]byte {
 	return shards
 }
 
-func write_shards(filename string, contents []byte, backends []string) (*Metadata, error) {
+func Write_shards(filename string, contents []byte, backends []string) (*Metadata, error) {
 
 	meta := new(Metadata)
-	for _, sh := range divide_into_shards(contents) {
+	for _, sh := range Divide_into_shards(contents) {
 
 		c := Nwfs_rpc_client{Backends: get_backends(backends, NUM_BACK)}
 

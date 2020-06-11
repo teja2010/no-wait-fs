@@ -42,7 +42,7 @@ func (fsl *fs_client_singleLock) Read_op(filename string, op []string) (string, 
 }
 
 func (fsl *fs_client_singleLock) Write(filename string, contents []byte) (*Metadata, error) {
-	return write_shards(filename, contents, fsl.backends)
+	return Write_shards(filename, contents, fsl.backends)
 }
 
 func (fsl *fs_client_singleLock) Write_meta(filename string, meta *Metadata) error {
