@@ -3,24 +3,26 @@
 	"Back_servers" : ["127.0.0.1:7000"],
 	"Periodic_ms" : 5000,
 	"File_size" : 1000,
-	"RW_ratio" : 10.0,
+
+	"Read_prob" : 0.1,
 
 	"Locking" : "RCU",
 	"Locking_Possible_Values" : "RCU, NoLock, SingleLock, RWLock",
 
 	"Read_ops" : [
 		["grep ", " hello|bye|goodbye|greeting|regards"],
-		["grep ", " yesterday|todat|day before|day after|tomorrow"]
+		["grep ", " yesterday|today|day before|day after|tomorrow"]
 	],
 
 	"Write_ops" : [],
 
 
-	"IGNORE THE TESTS BELOW":"----------------------------------",
+	"TESTS BELOW":"-------------------------------------------",
 	"Test_backend":          false,
-	"Test_hello" :           true ,
-	"Test_benchmark_reads" : true ,
-	"Test_backend_bench" :   true ,
+	"Test_hello" :           false ,
+	"Test_benchmark_reads" : false ,
+	"Test_backend_bench" :   false ,
+	"Test_rand_rw_bench" :   true,
 
 	"IGNORE": "------------------------------------------------"
 

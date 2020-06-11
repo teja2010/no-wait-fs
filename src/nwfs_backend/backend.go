@@ -14,8 +14,8 @@ import (
 )
 
 const (
-	verbose_logs = false
-	success_logs = false
+	VERBOSE_LOGS = false
+	SUCCESS_LOGS = false
 )
 
 func print_help() {
@@ -50,7 +50,7 @@ func main() {
 		os.Exit(1)
 	}
 	
-	if verbose_logs {
+	if VERBOSE_LOGS {
 		log.Println("Start serving")
 	}
 
@@ -75,7 +75,7 @@ type rpc_iface interface {
 
 func (n *nwfs) WriteShard(contents []byte, hash *string) error {
 
-	if verbose_logs {
+	if VERBOSE_LOGS {
 		log.Println("WriteShard Entry:", contents, hash)
 	}
 
@@ -91,7 +91,11 @@ func (n *nwfs) WriteShard(contents []byte, hash *string) error {
 		log.Println("WriteShard failed", err)
 		return err
 	} else if exists == true {
-		log.Println("File exists.")
+		if VERBOSE_LOGS {
+			log.Println("File exists.")
+		} else {
+			fmt.Printf("F")
+		}
 		return nil
 	}
 
@@ -101,7 +105,7 @@ func (n *nwfs) WriteShard(contents []byte, hash *string) error {
 		return err
 	}
 
-	if success_logs {
+	if SUCCESS_LOGS {
 		log.Println("Writing", filepath, "successful")
 	} else {
 		fmt.Printf("r")
@@ -135,7 +139,7 @@ func (n *nwfs) Read_op(args *ReadArgs, op_output *string) error {
 		op = op + " " + filepath + " " + c
 	}
 
-	if verbose_logs {
+	if VERBOSE_LOGS {
 		log.Println("Read_op op:", op)
 	}
 
@@ -149,7 +153,7 @@ func (n *nwfs) Read_op(args *ReadArgs, op_output *string) error {
 		return nil
 	}
 
-	if success_logs {
+	if SUCCESS_LOGS {
 		log.Println("Run op:", op)
 		log.Println("Output:", output)
 	} else {
