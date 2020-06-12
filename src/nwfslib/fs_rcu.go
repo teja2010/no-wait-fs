@@ -24,6 +24,16 @@ func (f *fs_client_rcu) Write(filename string, contents []byte ) (*Metadata, err
 	return Write_shards(filename, contents, f.backends)
 }
 
+func (f *fs_client_rcu) Write_op(filename string, op []string) (int32, *Metadata, error) {
+	ver, meta_bytes, err := f.zk_rcu.Dereference()
+	if err != nil {
+		return -1, nil, err
+	}
+
+	m, err :=  Write_op_shards(meta_bytes, op)
+	return ver, m, err
+}
+
 func (f *fs_client_rcu) Write_meta(filename string, meta *Metadata) error {
 
 	meta_bytes, err := json.Marshal(meta)

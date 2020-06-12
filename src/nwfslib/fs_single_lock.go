@@ -33,7 +33,6 @@ func Create_single_lock_res(filepath string, zk *go_zk.Conn) (*go_zk.Lock, error
 }
 
 func (fsl *fs_client_singleLock) Read_op(filename string, op []string) (int32, string, error) {
-	fsl.lock.Lock()
 	zk := fsl.zk_conn
 
 	path := "/" + filename + "/singlelock_data"
@@ -44,6 +43,19 @@ func (fsl *fs_client_singleLock) Read_op(filename string, op []string) (int32, s
 	out, err := Read_op(meta_bytes, op)
 
 	return stat.Version, out, err
+}
+
+func (fsl *fs_client_singleLock) Write_op(filename string, op []string) (int32, *Metadata, error) {
+	path := "/" + filename + "/singlelock_data"
+
+	zk := fsl.zk_conn
+	meta_bytes, stat, err := zk.Get(path)
+	if err != nil {
+		return -1, nil, err
+	}
+
+	m, err := Write_op_shards(meta_bytes, op)
+	return stat.Version, m, err
 }
 
 func (fsl *fs_client_singleLock) Write(filename string, contents []byte) (*Metadata, error) {

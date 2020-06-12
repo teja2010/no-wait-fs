@@ -71,7 +71,10 @@ type rpc_iface interface {
 	// given the hash and the operation, the operation's output will be
 	// returned in op_output
 	Read_op(args *ReadArgs, op_output *string) error
+
+	Write_op_shards(args *ReadArgs, hash *string) error
 }
+
 
 func (n *nwfs) WriteShard(contents []byte, hash *string) error {
 
@@ -163,6 +166,22 @@ func (n *nwfs) Read_op(args *ReadArgs, op_output *string) error {
 	*op_output = string(output)
 	return nil
 
+}
+
+func (n *nwfs) Write_op_shards(args *ReadArgs, hash *string) error {
+
+	out := ""
+	err := n.Read_op(args, &out)
+	if err != nil {
+		return err
+	}
+
+	err = n.WriteShard([]byte(out), hash)
+	if err == nil {
+		fmt.Printf("u")
+	}
+
+	return err
 }
 
 

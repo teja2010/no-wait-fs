@@ -109,10 +109,10 @@ func (rw *rwlock) WriteLock() error {
 		return err
 	}
 
-	err = rw.wait_for("writer") // wait till we are the latest writer
-	if err != nil {
-		return err
-	}
+	//err = rw.wait_for("writer") // wait till we are the latest writer
+	//if err != nil {
+	//	return err
+	//}
 
 	err = rw.wait_for("reader") // wait for other readers to complete
 	return err

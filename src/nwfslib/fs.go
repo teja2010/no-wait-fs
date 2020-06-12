@@ -107,7 +107,11 @@ func Open(filepath string, zk_servers, backends []string, locking string) (Fs_ha
 }
 
 type Fs_handle interface {
+
+	//Read_op and Write_op protected by read_lock
 	Read_op(filename string, op []string) (int32, string, error)
+	Write_op(filename string, op []string) (int32, *Metadata, error)
+
 	Write(filename string, contents []byte) (*Metadata, error)
 	Write_meta(filename string, meta *Metadata) error
 	Read_lock(filename string) error

@@ -108,6 +108,64 @@ func Write_shards(filename string, contents []byte, backends []string) (*Metadat
 	return meta, nil
 }
 
+func Write_op_shards(meta_bytes []byte, op []string) (*Metadata, error) {
+	if ENTRY_ARG_LOGS {
+		log.Println(__FUNC__(), op)
+	}
+
+	var meta Metadata
+	err := json.Unmarshal(meta_bytes, &meta)
+	if err != nil {
+		log.Println("json.Unmarshal failed: ", err)
+		return nil,err
+	}
+	type wo_data struct {
+		hash string
+		err error
+	}
+
+	var new_meta Metadata
+	new_meta.Shards = make([]string, len(meta.Backs))
+	new_meta.Backs = make([][]string, len(meta.Backs))
+	ch_arr := make([]chan wo_data, len(meta.Backs))
+
+	for i, backs := range meta.Backs {
+		ch_arr[i] = make(chan wo_data, 1);
+		shard := meta.Shards[i]
+		go func(ch chan wo_data, shard string, backs []string) {
+			c := Nwfs_rpc_client{Backends: backs}
+
+			err := c.Connect()
+			if err != nil {
+				ch <- wo_data{"", err}
+				return
+			}
+			defer c.Close()
+
+			hash := ""
+			err = c.Write_op_shards(&ReadArgs{Hash: shard, Op: op}, &hash)
+			if err != nil {
+				ch <- wo_data{"", err}
+				return
+			}
+
+			ch <- wo_data{hash, nil}
+		}(ch_arr[i], shard, backs)
+	}
+
+	for i, b := range meta.Backs {
+		wo := <-ch_arr[i]
+		if wo.err != nil {
+			return nil, wo.err
+		}
+		new_meta.Shards[i] = wo.hash
+		new_meta.Backs[i] = make([]string, 0)
+		new_meta.Backs[i] = append(new_meta.Backs[i], b...)
+	}
+
+	return &new_meta, nil
+}
+
 func get_backends(_backs []string, num int) []string {
 
 	backs := make([]string, 0)

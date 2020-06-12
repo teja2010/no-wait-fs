@@ -99,6 +99,30 @@ func (nrc *Nwfs_rpc_client) Read_op(args *ReadArgs,
 	return err
 }
 
+func (nrc *Nwfs_rpc_client) Write_op_shards(args *ReadArgs, hash *string) error {
+
+	if ENTRY_ARG_LOGS {
+		log.Println(__FUNC__(), args)
+	}
+	var err error
+	*hash = ""
+	for i:= 0; i<NUM_BACK; i++ {
+		out := ""
+		c := nrc.clients[i]
+		err = c.Call("NWFS.Write_op_shards", args, &out)
+		if err != nil {
+			continue
+		}
+
+		*hash = out
+		return nil
+		//TODO handle multiple backends
+	}
+
+	return err
+
+}
+
 func (nrc *Nwfs_rpc_client) Close() {
 	for i := range nrc.clients {
 		nrc.clients[i].Close()

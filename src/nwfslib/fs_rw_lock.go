@@ -38,7 +38,18 @@ func (frwl *fs_client_rwlock) Read_op(filename string, op []string) (int32, stri
 	if err != nil {
 		return -1, "", err
 	}
-	out, err := Read_op(meta_bytes, op)
+	m, err := Read_op(meta_bytes, op)
+
+	return stat.Version, m, err
+}
+func (frwl *fs_client_rwlock) Write_op(filename string, op []string) (int32, *Metadata, error) {
+	zk := frwl.zk_conn
+	meta_bytes, stat, err := zk.Get("/"+filename)
+	if err != nil {
+		return -1, nil, err
+	}
+
+	out, err := Write_op_shards(meta_bytes, op)
 
 	return stat.Version, out, err
 }

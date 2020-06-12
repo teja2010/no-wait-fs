@@ -39,6 +39,17 @@ func (fnl *fs_client_nolock) Read_op(filename string, op []string) (int32, strin
 	out, err := Read_op(meta_bytes, op)
 	return stat.Version, out, err
 }
+func (fnl *fs_client_nolock) Write_op(filename string, op []string) (int32, *Metadata, error) {
+	zk := fnl.zk_conn
+	path := "/" + filename + "/nolock_data"
+	meta_bytes, stat, err := zk.Get(path)
+	if err != nil {
+		return -1, nil, err
+	}
+
+	m, err := Write_op_shards(meta_bytes, op)
+	return stat.Version, m, err
+}
 func (fnl *fs_client_nolock) Write(filename string, contents []byte) (*Metadata, error) {
 	return Write_shards(filename, contents, fnl.backends)
 }
