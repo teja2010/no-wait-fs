@@ -85,7 +85,7 @@ func (c *Config) App_Text_Processing() {
 			return
 		}
 
-		log.Printf("<%s>\n",grep_out)
+		//log.Printf("<%s>\n",grep_out)
 
 		var sed_out string
 		if len(grep_out) > 0 {
@@ -129,8 +129,6 @@ func (c *Config) App_Text_Processing() {
 	}
 }
 
-
-
 func (c *Config) getWords() map[string]string {
 
 	wordmap := make(map[string]string)
@@ -159,11 +157,6 @@ func (c *Config) getWords() map[string]string {
 	}
 
 	return wordmap
-}
-
-
-func (c *Config) App_Fill_CSV() {
-	log.Println("App_Fill_CSV")
 }
 
 func (c *Config) App_Syslog() {

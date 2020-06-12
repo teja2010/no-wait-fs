@@ -16,64 +16,6 @@ import (
 	go_zk "github.com/samuel/go-zookeeper/zk"
 )
 
-const (
-	hello_lyrics = `Hello, it's me
-	I was wondering if after all these years you'd like to meet
-	To go over everything
-	They say that time's supposed to heal ya
-	But I ain't done much healing
-
-	Hello, can you hear me?
-	I'm in California dreaming about who we used to be
-	When we were younger and free
-	I've forgotten how it felt before the world fell at our feet
-
-	There's such a difference between us
-	And a million miles
-
-	Hello from the other side
-	I must've called a thousand times
-	To tell you I'm sorry for everything that I've done
-	But when I call, you never seem to be home
-
-	Hello from the outside
-	At least I can say that I've tried
-	To tell you I'm sorry for breaking your heart
-	But it don't matter, it clearly doesn't tear you apart anymore
-
-	Hello, how are you?
-	It's so typical of me to talk about myself, I'm sorry
-	I hope that you're well
-	Did you ever make it out of that town where nothing ever happened?
-
-	It's no secret that the both of us are running out of time
-
-	So hello from the other side
-	I must've called a thousand times
-	To tell you I'm sorry for everything that I've done
-	But when I call, you never seem to be home
-
-	Hello from the outside
-	At least I can say that I've tried
-	To tell you I'm sorry for breaking your heart
-	But it don't matter, it clearly doesn't tear you apart anymore
-
-	Oooooh, anymore
-	Oooooh, anymore
-	Oooooh, anymore
-	Anymore
-
-	Hello from the other side
-	I must've called a thousand times
-	To tell you I'm sorry for everything that I've done
-	But when I call, you never seem to be home
-
-	Hello from the outside
-	At least I can say that I've tried
-	To tell you I'm sorry for breaking your heart
-	But it don't matter, it clearly doesn't tear you apart anymore
-	` // adele
-)
 
 func print_help() {
 	fmt.Println("Usage: nwfs_client <config_file>")
@@ -107,10 +49,6 @@ type Config struct {
 
 	Sample_Text_Processing bool
 	Wrong_wordlist_file string
-
-	Sample_Fill_CSV bool
-	Sample_Syslog bool
-
 
 }
 
@@ -154,15 +92,19 @@ func main() {
 
 	if config.Test_backend {
 		config.call_backend()
+		return
 	}
 	if config.Test_hello {
 		config.hello_test()
+		return
 	}
 	if config.Test_benchmark_reads {
 		config.read_bench()
+		return
 	}
 	if config.Test_backend_bench {
 		config.backend_bench()
+		return
 	}
 	if config.Test_rand_rw_bench {
 		res := make(chan int64, config.Threads_num)
@@ -190,9 +132,11 @@ func main() {
 					config.BENCH_LOOP_LEN, " iters,",
 					count, "threads")
 		}
+		return
 	}
 	if config.Test_sys_logs {
 		config.sys_log_bench()
+		return
 	}
 
 	if config.Push_sample_data {
@@ -203,14 +147,8 @@ func main() {
 
 	if config.Sample_Text_Processing {
 		config.App_Text_Processing()
+		return
 	}
-	if config.Sample_Fill_CSV {
-		config.App_Fill_CSV()
-	}
-	if config.Sample_Syslog {
-		config.App_Syslog()
-	}
-
 }
 
 func send_update(file_size uint64) {
@@ -327,7 +265,7 @@ func (c *Config) hello_test() {
 	}
 	defer fs.Close()
 
-	meta, err := fs.Write(filename, []byte(hello_lyrics+"\n"+hello_lyrics))
+	meta, err := fs.Write(filename, []byte(hello_lyrics))
 	if err != nil {
 		log.Println("Write Failed :", err)
 		return
@@ -356,13 +294,41 @@ func (c *Config) hello_test() {
 
 	log.Println("Read_op ret:", out)
 
+	v, meta, err := fs.Write_op(filename, []string{"sed s/hello/bye/gi ", " "})
+	meta.Version = v
+
 	err = fs.Read_unlock(filename)
 	if err != nil {
 		log.Println("Read_unlock Failed :", err)
 		return
 	}
 
+	err = fs.Write_meta(filename, meta)
+	if err != nil {
+		log.Println("Write_meta failed :", err)
+		return
+	}
 
+
+	err = fs.Read_lock(filename)
+	if err != nil {
+		log.Println("Read_lock Failed :", err)
+		return
+	}
+
+	_, out2, err := fs.Read_op(filename, []string{"grep -i bye ", " "})
+	if err != nil {
+		log.Println("Read_op failed: ", err)
+		return
+	}
+
+	log.Println("Read_op ret:", out2)
+
+	err = fs.Read_unlock(filename)
+	if err != nil {
+		log.Println("Read_unlock Failed :", err)
+		return
+	}
 }
 
 
