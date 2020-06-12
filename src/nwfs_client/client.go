@@ -7,6 +7,7 @@ import (
 	//"io"
 	"time"
 	"strconv"
+	"os/exec"
 	//"math"
 	"math/rand"
 	"io/ioutil"
@@ -15,9 +16,6 @@ import (
 )
 
 const (
-	BENCH_LOOP_LEN = 200
-
-
 	hello_lyrics = `Hello, it's me
 	I was wondering if after all these years you'd like to meet
 	To go over everything
@@ -89,6 +87,10 @@ type Config struct {
 	Read_prob float32
 	Threads_num int
 	Locking string
+	BENCH_LOOP_LEN int
+	Sys_op_arr []string
+
+	Push_sys_out bool
 
 	Read_ops [][]string
 
@@ -106,6 +108,7 @@ func read_config(filename string) Config {
 		log.Println("Open error", err)
 		os.Exit(1)
 	}
+	defer jd.Close()
 
 	jsonData, err := ioutil.ReadAll(jd)
 	if err != nil {
@@ -116,7 +119,7 @@ func read_config(filename string) Config {
 	var config Config
 	err = json.Unmarshal(jsonData, &config)
 	if err != nil {
-		log.Println("Config unmarshall failed")
+		log.Println("Config unmarshall failed", err)
 		os.Exit(1)
 	}
 
@@ -131,6 +134,7 @@ func main() {
 	if len(args) != 1 {
 		print_help()
 	}
+	rand.Seed(time.Now().UnixNano())
 
 	log.SetFlags(log.LstdFlags|log.Lshortfile)
 
@@ -149,16 +153,68 @@ func main() {
 		config.backend_bench()
 	}
 	if config.Test_rand_rw_bench {
+		res := make(chan int64, config.Threads_num)
+
 		for i:=0; i< config.Threads_num; i++ {
-			go config.rand_rw_bench()
+			go config.rand_rw_bench(res)
+		}
+
+		var avg int64
+		count := int64(0)
+		for i:=0; i< config.Threads_num; i++ {
+			temp := <-res
+			if temp <= 0 {
+				continue
+			}
+			avg += temp
+			count++
+		}
+		avg = avg/count
+		avg_time, err := time.ParseDuration(strconv.Itoa(int(avg))+"us")
+		if err != nil {
+			log.Println("time.ParseDuration err:", err)
+		} else {
+			log.Println("Random RW: ", avg_time, "/",
+					config.BENCH_LOOP_LEN, " iters,",
+					count, "threads")
 		}
 	}
 
 
 	for {
-		send_update(config.File_size)
 		log.Println("--- Wait for", config.Periodic_ms, "Milliseconds ---")
 		time.Sleep(time.Duration(config.Periodic_ms)*time.Millisecond)
+
+		var err error
+		filename := "client_rw_bench"
+
+		fs, err := nwfslib.Open(filename, c.Zk_servers, c.Back_servers,
+				    c.Locking)
+		if err != nil {
+			log.Println("Open failed :", err)
+			return -1
+		}
+		defer fs.Close()
+
+		if config.Push_sys_out {
+			sys_out := config.get_system_stats()
+
+			meta, err := fs.Write(filename, []byte(sys_out))
+			if err != nil {
+				log.Println("Write Failed :", err)
+				return -1
+			}
+
+			meta.Version = int32(last_read_ver);
+			//set it since we dont care about the version.
+
+			err = fs.Write_meta(filename, meta)
+			if err != nil {
+				log.Println("Write_meta Failed :", err)
+				return -1
+			}
+		} else { //keep reading
+		}
 	}
 }
 
@@ -174,6 +230,8 @@ func (c *Config) call_backend() {
 		log.Println("test_backend Connect err:", err)
 		return
 	}
+	defer nrc.Close()
+
 	fmt.Println("nrc:", nrc)
 
 	fmt.Println("Commands: Read_op/WriteShard\n")
@@ -213,7 +271,7 @@ func (c* Config) backend_bench() {
 
 	var meta *nwfslib.Metadata
 	start := time.Now()
-	for i:=0; i<BENCH_LOOP_LEN; i++ {
+	for i:=0; i<c.BENCH_LOOP_LEN; i++ {
 		fmt.Printf(".")
 		if i%50 == 49 {
 			fmt.Println(i+1)
@@ -221,9 +279,7 @@ func (c* Config) backend_bench() {
 
 		var err error
 		meta, err = nwfslib.Write_shards(filename,
-					[]byte(strconv.Itoa(i) +
-						hello_lyrics +
-						strconv.Itoa(i)),
+					[]byte(c.get_system_stats()),
 					c.Back_servers)
 		if err != nil {
 			log.Println("Read_op err: ", err)
@@ -234,7 +290,7 @@ func (c* Config) backend_bench() {
 		}
 	}
 	elapsed := time.Now().Sub(start)
-	log.Println("Backend Write Bench", elapsed, "/", BENCH_LOOP_LEN, " iters")
+	log.Println("Backend Write Bench", elapsed, "/", c.BENCH_LOOP_LEN, " iters")
 
 	meta_bytes, err := json.Marshal(meta)
 	if err != nil {
@@ -243,7 +299,7 @@ func (c* Config) backend_bench() {
 	}
 
 	start = time.Now()
-	for i:=0; i<BENCH_LOOP_LEN; i++ {
+	for i:=0; i<c.BENCH_LOOP_LEN; i++ {
 		fmt.Printf(".")
 		if i%50 == 49 {
 			fmt.Println(i+1)
@@ -259,7 +315,7 @@ func (c* Config) backend_bench() {
 		}
 	}
 	elapsed = time.Now().Sub(start)
-	log.Println("Backend Read Bench", elapsed, "/", BENCH_LOOP_LEN, " iters")
+	log.Println("Backend Read Bench", elapsed, "/", c.BENCH_LOOP_LEN, " iters")
 
 
 }
@@ -274,8 +330,9 @@ func (c *Config) hello_test() {
 		log.Println("Open failed :", err)
 		return
 	}
+	defer fs.Close()
 
-	meta, err := fs.Write(filename, []byte(hello_lyrics))
+	meta, err := fs.Write(filename, []byte(hello_lyrics+"\n"+hello_lyrics))
 	if err != nil {
 		log.Println("Write Failed :", err)
 		return
@@ -310,7 +367,6 @@ func (c *Config) hello_test() {
 		return
 	}
 
-	fs.Close()
 
 }
 
@@ -325,6 +381,7 @@ func (c *Config) read_bench() {
 		log.Println("Open failed :", err)
 		return
 	}
+	defer fs.Close()
 
 	meta, err := fs.Write(filename, []byte(hello_lyrics))
 	if err != nil {
@@ -342,7 +399,7 @@ func (c *Config) read_bench() {
 	}
 
 	start := time.Now()
-	for i:=0; i<BENCH_LOOP_LEN; i++ {
+	for i:=0; i<c.BENCH_LOOP_LEN; i++ {
 		fmt.Printf(".")
 		if i%50 == 49 {
 			fmt.Println(i+1)
@@ -367,7 +424,7 @@ func (c *Config) read_bench() {
 		}
 	}
 	elapsed := time.Now().Sub(start)
-	log.Println("Lock-Read-Unlock:", elapsed, "/", BENCH_LOOP_LEN, " iters")
+	log.Println("Lock-Read-Unlock:", elapsed, "/", c.BENCH_LOOP_LEN, " iters")
 
 
 	start = time.Now()
@@ -376,7 +433,7 @@ func (c *Config) read_bench() {
 		log.Println("Read_lock Failed :", err)
 		return
 	}
-	for i:=0; i<BENCH_LOOP_LEN; i++ {
+	for i:=0; i<c.BENCH_LOOP_LEN; i++ {
 		fmt.Printf(".")
 		if i%50 == 49 {
 			fmt.Println(i+1)
@@ -394,28 +451,30 @@ func (c *Config) read_bench() {
 		return
 	}
 	elapsed = time.Now().Sub(start)
-	log.Println("Reads:", elapsed, "/", BENCH_LOOP_LEN, " iters")
+	log.Println("Reads:", elapsed, "/", c.BENCH_LOOP_LEN, " iters")
 
 }
 
-func (c *Config) rand_rw_bench() {
+func (c *Config) rand_rw_bench(result chan int64) {
+	result <- c._rand_rw_bench()
+}
+func (c *Config) _rand_rw_bench() int64 {
 	var err error
-	filename := "client_read_bench"
+	filename := "client_rw_bench"
 
 	fs, err := nwfslib.Open(filename, c.Zk_servers, c.Back_servers,
 			    c.Locking)
 	if err != nil {
 		log.Println("Open failed :", err)
-		return
+		return -1
 	}
+	defer fs.Close()
 	last_read_ver := -1
-
-	rand.Seed(time.Now().UnixNano())
 
 	rw_arr := "w"
 	writes := 1
 	reads := 0
-	for i:=0; i< BENCH_LOOP_LEN-1; i++ {
+	for i:=0; i< c.BENCH_LOOP_LEN-1; i++ {
 		toss := rand.Float32()
 		if toss > c.Read_prob {
 			rw_arr += "r"
@@ -439,7 +498,7 @@ func (c *Config) rand_rw_bench() {
 			meta, err := fs.Write(filename, []byte(hello_lyrics))
 			if err != nil {
 				log.Println("Write Failed :", err)
-				return
+				return -1
 			}
 
 			meta.Version = int32(last_read_ver);
@@ -448,7 +507,7 @@ func (c *Config) rand_rw_bench() {
 			err = fs.Write_meta(filename, meta)
 			if err != nil {
 				log.Println("Write_meta Failed :", err)
-				return
+				return -1
 			}
 
 		} else if op == 'r' {
@@ -457,7 +516,7 @@ func (c *Config) rand_rw_bench() {
 				err = fs.Read_lock(filename)
 				if err != nil {
 					log.Println("Read_lock Failed :", err)
-					return
+					return -1
 				}
 			}
 
@@ -466,22 +525,40 @@ func (c *Config) rand_rw_bench() {
 						[]string{"grep -i hello ", " "})
 			if err != nil {
 				log.Println("Read_op failed: ", err)
-				return
+				return -1
 			}
 			//last_read_ver = meta.Version
 
-			if ((i+1 < BENCH_LOOP_LEN && rw_arr[i+1] != 'r') ||
-			    (i == BENCH_LOOP_LEN)) {
+			if ((i+1 < c.BENCH_LOOP_LEN && rw_arr[i+1] != 'r') ||
+			    (i == c.BENCH_LOOP_LEN)) {
 				err = fs.Read_unlock(filename)
 				if err != nil {
 					log.Println("Read_lock Failed :", err)
-					return
+					return -1
 				}
 			}
 		}
 	}
 	elapsed := time.Now().Sub(start)
-	log.Println("Random RW:", elapsed, "/", BENCH_LOOP_LEN, " iters")
-
-	fs.Close()
+	//log.Println("Random RW:", elapsed, "/", c.BENCH_LOOP_LEN, " iters")
+	return elapsed.Microseconds()
 }
+
+func (c* Config) get_system_stats() string {
+
+	time.Sleep(time.Duration(c.Periodic_ms)*time.Millisecond)
+	data := ""
+	for _, op := range c.Sys_op_arr {
+		cmd := exec.Command("sh", "-c", op)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			log.Println("system_stats", err, "|", out)
+		} else {
+			data += string(out)
+		}
+	}
+
+	return data
+}
+
+

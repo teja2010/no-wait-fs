@@ -6,25 +6,33 @@
 
 	"Read_prob" : 0.1,
 	"Threads_num" : 4,
+	"BENCH_LOOP_LEN" : 200,
 
 	"Locking" : "RCU",
 	"Locking_Possible_Values" : "RCU, NoLock, SingleLock, RWLock",
 
 	"Read_ops" : [
-		["grep ", " hello|bye|goodbye|greeting|regards"],
-		["grep ", " yesterday|today|day before|day after|tomorrow"]
+		["grep firefox", ""],
+		["grep spotify", ""]
 	],
 
 	"Write_ops" : [],
 
-
 	"TESTS BELOW":"-------------------------------------------",
 	"Test_backend":          false,
-	"Test_hello" :           false ,
+	"Test_hello" :           true,
 	"Test_benchmark_reads" : false ,
-	"Test_backend_bench" :   false ,
-	"Test_rand_rw_bench" :   true,
+	"Test_backend_bench" :   false,
+	"Test_rand_rw_bench" :   false,
 
-	"IGNORE": "------------------------------------------------"
+	"IGNORE": "------------------------------------------------",
+
+	"Sys_op_arr" : [
+		"uname -a",
+		"ss --socket=all -neiopam",
+		"lsof ",
+		"top -b -n1"
+	],
+	"Push_sys_out": true
 
 }

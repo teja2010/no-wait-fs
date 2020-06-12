@@ -46,26 +46,52 @@ func Divide_into_shards(contents []byte) [][]byte {
 }
 
 func Write_shards(filename string, contents []byte, backends []string) (*Metadata, error) {
+	
+	if ENTRY_ARG_LOGS {
+		log.Println(__FUNC__(), filename, backends)
+	}
+
+	shard_arr := Divide_into_shards(contents)
+	type ws_data struct {
+		hash string
+		backends []string
+		err error
+	}
+	ch_arr := make([]chan ws_data, len(shard_arr))
+
+	for i, sh := range shard_arr {
+		ch_arr[i] = make(chan ws_data, 1);
+
+		go func(ch chan ws_data, sh []byte) {
+			c := Nwfs_rpc_client{Backends: get_backends(backends, NUM_BACK)}
+
+			err := c.Connect()
+			if err != nil {
+				ch<-ws_data{"", nil, err}
+				return
+				//return nil, err
+			}
+			defer c.Close()
+
+			hash := ""
+			_, err = c.WriteShard(sh, &hash)
+			if err != nil {
+				ch<-ws_data{"", nil, err}
+				return
+			}
+
+			ch <- ws_data{hash, c.Backends, nil}
+		}(ch_arr[i], sh)
+	}
 
 	meta := new(Metadata)
-	for _, sh := range Divide_into_shards(contents) {
-
-		c := Nwfs_rpc_client{Backends: get_backends(backends, NUM_BACK)}
-
-		err := c.Connect()
-		if err != nil {
-			return nil, err
+	for i := range shard_arr {
+		ws := <-ch_arr[i]
+		if ws.err != nil {
+			return nil, ws.err
 		}
-		defer c.Close()
-
-		hash := ""
-		_, err = c.WriteShard(sh, &hash)
-		if err != nil {
-			return nil, err
-		}
-
-		meta.Shards = append(meta.Shards, hash)
-		meta.Backs = append(meta.Backs, c.Backends)
+		meta.Shards = append(meta.Shards, ws.hash)
+		meta.Backs = append(meta.Backs, ws.backends)
 	}
 
 	if VERBOSE_LOGS {
@@ -75,17 +101,27 @@ func Write_shards(filename string, contents []byte, backends []string) (*Metadat
 	return meta, nil
 }
 
-func get_backends(backs []string, num int) []string {
+func get_backends(_backs []string, num int) []string {
+
+	backs := make([]string, 0)
+	backs = append(backs, _backs...)
+
+	if ENTRY_ARG_LOGS {
+		log.Println(__FUNC__(), backs, num)
+	}
 
 	back_num := len(backs)
 	chosen_backs := make([]string, num)
 
 	for i:=0; i<num; i++ {
-		choose := rand.Intn(back_num-i)
+		choose := rand.Intn(10000)%(back_num-i)
 		chosen_backs[i] = backs[i+choose]
 		backs[choose] = backs[i]
 	}
 
+	if ENTRY_ARG_LOGS {
+		log.Println(__FUNC__(), "exit:", chosen_backs)
+	}
 	return chosen_backs
 }
 
@@ -101,25 +137,44 @@ func Read_op(meta_bytes []byte, op []string) (string, error) {
 		log.Println("json.Unmarshal failed: ", err)
 		return "", err
 	}
+	type ro_data struct {
+		s string
+		err error
+	}
+
+	ch_arr := make([]chan ro_data, len(meta.Backs))
 
 	output := ""
 	for i, backs := range meta.Backs {
+		ch_arr[i] = make(chan ro_data, 1);
 		shard := meta.Shards[i]
-		c := Nwfs_rpc_client{Backends: backs}
+		go func(ch chan ro_data, shard string, backs []string) {
+			c := Nwfs_rpc_client{Backends: backs}
 
-		err := c.Connect()
-		if err != nil {
-			return "", err
+			err := c.Connect()
+			if err != nil {
+				ch <- ro_data{"", err}
+				return
+			}
+			defer c.Close()
+
+			op_output := ""
+			err = c.Read_op(&ReadArgs{Hash: shard, Op: op}, &op_output)
+			if err != nil {
+				ch <- ro_data{"", err}
+				return
+			}
+
+			ch <- ro_data{op_output, nil}
+		}(ch_arr[i], shard, backs)
+	}
+
+	for i, _ := range meta.Backs {
+		ro := <-ch_arr[i]
+		if ro.err != nil {
+			return "", ro.err
 		}
-		defer c.Close()
-
-		op_output := ""
-		err = c.Read_op(&ReadArgs{Hash: shard, Op: op}, &op_output)
-		if err != nil {
-			return "", err
-		}
-
-		output += op_output
+		output += ro.s
 	}
 
 	if VERBOSE_LOGS {

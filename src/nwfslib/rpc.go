@@ -25,7 +25,7 @@ func (nrc *Nwfs_rpc_client) Connect() error {
 
 	nrc.clients = make([]*rpc.Client, len(nrc.Backends))
 
-	nrc.clients = make([]*rpc.Client, NUM_BACK)
+	nrc.clients = make([]*rpc.Client, len(nrc.Backends))
 	for i, b := range nrc.Backends {
 		c, err := rpc.DialHTTP("tcp", b)
 		if err != nil {
@@ -78,6 +78,10 @@ func (nrc *Nwfs_rpc_client) WriteShard( contents []byte,
 //type ReadArgs nwfslib.ReadArgs
 func (nrc *Nwfs_rpc_client) Read_op(args *ReadArgs,
 				    op_output *string) (error) {
+
+	if ENTRY_ARG_LOGS {
+		log.Println(__FUNC__(), args)
+	}
 	var err error
 	*op_output = ""
 	for i:= 0; i<NUM_BACK; i++ {

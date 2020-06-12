@@ -27,6 +27,7 @@ type rcu_data struct {
 	Zk *go_zk.Conn
 	rlock_file string
 	wlock *go_zk.Lock
+	//wchan chan int
 }
 
 func latest_version(children []string) (int, string) {
@@ -90,15 +91,30 @@ func Create_RCU_resource(resource_name string,
 
 	//Run one or run all
 	mresp, err := zk.Multi(ops...)
-	if err != nil {
+	if err == go_zk.ErrNodeExists {
+		if VERBOSE_LOGS {
+			log.Println("Node exists")
+		}
+	} else if err != nil {
+		if VERBOSE_LOGS {
+			log.Println("Multi err", err)
+		}
 		return nil, err
 	}
 
-	for _, mr := range mresp {
-		if mr.Error != nil {
-			return nil, err
-		}
-	}
+	// check this part
+	//for _, mr := range mresp {
+	//	log.Println(mr)
+	//	if mr.Error == go_zk.ErrNodeExists {
+	//		log.Println("err3", mr.Error) // make verbose
+	//		continue
+	//	} else {
+	//		if mr.Error != nil {
+	//			log.Println("err2", mr.Error) // make verbose
+	//			return nil, mr.Error
+	//		}
+	//	}
+	//}
 
 	log.Println("Created RCU resource ", mresp[0].String)
 
@@ -166,7 +182,10 @@ func (zk_rcu *rcu_data) Read_unlock() error {
 					"Succesful")
 		}
 	}
+
 	zk_rcu.rlock_file = ""
+
+
 	return err
 }
 
@@ -229,10 +248,38 @@ func (zk_rcu *rcu_data) Dereference() ([]byte, error) {
 
 func (zk_rcu *rcu_data) writer_lock() error {
 	// just use the locks provided by the library
-	return zk_rcu.wlock.Lock()
+	err := zk_rcu.wlock.Lock()
+	return err
+
+	//go zk_rcu.rcu_gc()
+
 }
 
 func (zk_rcu *rcu_data) writer_unlock() error {
+	//<-zk_rcu.wchan
+
 	return zk_rcu.wlock.Unlock()
 }
 
+//func (zk_rcu *rcu_data) rcu_gc() {
+//	defer func (){ 0->zk_rcu.wchan }()
+//
+//	children, _, err := zk.Children("/" + zk_rcu.resource_name)
+//	if err != nil {
+//		return err
+//	}
+//	latest, lstr := latest_version(children)
+//
+//	for _, ch := range children {
+//		if ch == lstr {
+//			continue
+//		}
+//
+//		children, _, err := zk.Children("/" + zk_rcu.resource_name+
+//						"/" + ch)
+//		if len(ch) == 0 {
+//			_ = zk.Delete(temp, -1)
+//		}
+//	}
+//
+//}
