@@ -19,7 +19,7 @@
 
 	"TESTS BELOW":"-------------------------------------------",
 	"Test_backend":          false,
-	"Test_hello" :           true,
+	"Test_hello" :           false,
 	"Test_benchmark_reads" : false ,
 	"Test_backend_bench" :   false,
 	"Test_rand_rw_bench" :   false,
@@ -27,13 +27,23 @@
 
 	"IGNORE": "------------------------------------------------",
 
+	"Push_sample_data": false,
+	"Text_file": "test_data/text_file.txt",
+
+
+	"Sample_Text_Processing": true,
+	"Wrong_wordlist_file": "test_data/wordlist.txt",
+
+
+	"Sample_Fill_CSV": false,
+	"Sample_Syslog": false,
+
 	"Sys_op_arr" : [
 		"uname -a",
 		"ss --socket=all -neiopam",
 		"lsof ",
 		"top -b -n1"
 	],
-
 
 
 

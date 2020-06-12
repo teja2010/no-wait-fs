@@ -30,10 +30,17 @@ func Shard_hash(input []byte) string {
 func Divide_into_shards(contents []byte) [][]byte {
 	shards := make([][]byte, 0)
 	for len(contents)>0 {
-		ll := SHARD_SIZE
+		var ll int
 		if len(contents) < SHARD_SIZE {
 			ll = len(contents)
+		} else {
+			for ll = SHARD_SIZE; ll < len(contents); ll++ {
+				if contents[ll] == '\n' {
+					break;
+				}
+			}
 		}
+
 		shards = append(shards, contents[:ll])
 		contents = contents[ll:]
 	}

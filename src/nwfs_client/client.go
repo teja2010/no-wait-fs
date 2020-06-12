@@ -102,6 +102,16 @@ type Config struct {
 	Test_rand_rw_bench bool
 	Test_sys_logs bool
 
+	Push_sample_data bool
+	Text_file string
+
+	Sample_Text_Processing bool
+	Wrong_wordlist_file string
+
+	Sample_Fill_CSV bool
+	Sample_Syslog bool
+
+
 }
 
 func read_config(filename string) Config {
@@ -185,6 +195,21 @@ func main() {
 		config.sys_log_bench()
 	}
 
+	if config.Push_sample_data {
+		config.Push_data(config.Text_file, text_file)
+		return
+	}
+
+
+	if config.Sample_Text_Processing {
+		config.App_Text_Processing()
+	}
+	if config.Sample_Fill_CSV {
+		config.App_Fill_CSV()
+	}
+	if config.Sample_Syslog {
+		config.App_Syslog()
+	}
 
 }
 

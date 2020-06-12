@@ -108,7 +108,7 @@ func (n *nwfs) WriteShard(contents []byte, hash *string) error {
 	if SUCCESS_LOGS {
 		log.Println("Writing", filepath, "successful")
 	} else {
-		fmt.Printf("r")
+		fmt.Printf("w")
 	}
 
 	return nil
