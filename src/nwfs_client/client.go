@@ -13,6 +13,7 @@ import (
 	"io/ioutil"
 	"encoding/json"
 	"nwfslib"
+	go_zk "github.com/samuel/go-zookeeper/zk"
 )
 
 const (
@@ -83,12 +84,12 @@ type Config struct {
 	Zk_servers []string
 	Back_servers []string
 	Periodic_ms int
-	File_size uint64
 	Read_prob float32
 	Threads_num int
 	Locking string
 	BENCH_LOOP_LEN int
 	Sys_op_arr []string
+	Ignore_Version bool
 
 	Push_sys_out bool
 
@@ -99,6 +100,7 @@ type Config struct {
 	Test_benchmark_reads bool
 	Test_backend_bench bool
 	Test_rand_rw_bench bool
+	Test_sys_logs bool
 
 }
 
@@ -179,43 +181,11 @@ func main() {
 					count, "threads")
 		}
 	}
-
-
-	for {
-		log.Println("--- Wait for", config.Periodic_ms, "Milliseconds ---")
-		time.Sleep(time.Duration(config.Periodic_ms)*time.Millisecond)
-
-		var err error
-		filename := "client_rw_bench"
-
-		fs, err := nwfslib.Open(filename, c.Zk_servers, c.Back_servers,
-				    c.Locking)
-		if err != nil {
-			log.Println("Open failed :", err)
-			return -1
-		}
-		defer fs.Close()
-
-		if config.Push_sys_out {
-			sys_out := config.get_system_stats()
-
-			meta, err := fs.Write(filename, []byte(sys_out))
-			if err != nil {
-				log.Println("Write Failed :", err)
-				return -1
-			}
-
-			meta.Version = int32(last_read_ver);
-			//set it since we dont care about the version.
-
-			err = fs.Write_meta(filename, meta)
-			if err != nil {
-				log.Println("Write_meta Failed :", err)
-				return -1
-			}
-		} else { //keep reading
-		}
+	if config.Test_sys_logs {
+		config.sys_log_bench()
 	}
+
+
 }
 
 func send_update(file_size uint64) {
@@ -267,7 +237,7 @@ func (c *Config) call_backend() {
 }
 
 func (c* Config) backend_bench() {
-	filename := "clientdir"
+	filename := "clientdir_backend_bench"
 
 	var meta *nwfslib.Metadata
 	start := time.Now()
@@ -322,7 +292,7 @@ func (c* Config) backend_bench() {
 
 func (c *Config) hello_test() {
 	var err error
-	filename := "clientdir"
+	filename := "clientdir_hello_test"
 
 	fs, err := nwfslib.Open(filename, c.Zk_servers, c.Back_servers,
 			    c.Locking)
@@ -353,7 +323,7 @@ func (c *Config) hello_test() {
 		return
 	}
 
-	out, err := fs.Read_op(filename, []string{"grep -i hello ", " "})
+	_, out, err := fs.Read_op(filename, []string{"grep -i hello ", " "})
 	if err != nil {
 		log.Println("Read_op failed: ", err)
 		return
@@ -411,7 +381,7 @@ func (c *Config) read_bench() {
 			return
 		}
 
-		_, err := fs.Read_op(filename, []string{"grep -i hello ", " "})
+		_, _, err := fs.Read_op(filename, []string{"grep -i hello ", " "})
 		if err != nil {
 			log.Println("Read_op failed: ", err)
 			return
@@ -439,7 +409,7 @@ func (c *Config) read_bench() {
 			fmt.Println(i+1)
 		}
 
-		_, err := fs.Read_op(filename, []string{"grep -i hello ", " "})
+		_, _, err := fs.Read_op(filename, []string{"grep -i hello ", " "})
 		if err != nil {
 			log.Println("Read_op failed: ", err)
 			return
@@ -460,7 +430,7 @@ func (c *Config) rand_rw_bench(result chan int64) {
 }
 func (c *Config) _rand_rw_bench() int64 {
 	var err error
-	filename := "client_rw_bench"
+	filename := "client_rw_bench_" + c.Locking
 
 	fs, err := nwfslib.Open(filename, c.Zk_servers, c.Back_servers,
 			    c.Locking)
@@ -469,7 +439,8 @@ func (c *Config) _rand_rw_bench() int64 {
 		return -1
 	}
 	defer fs.Close()
-	last_read_ver := -1
+	last_read_ver := int32(-1)
+	lock_again_count := 0
 
 	rw_arr := "w"
 	writes := 1
@@ -501,10 +472,19 @@ func (c *Config) _rand_rw_bench() int64 {
 				return -1
 			}
 
-			meta.Version = int32(last_read_ver);
+			if c.Ignore_Version {
+				meta.Version = -1
+			} else {
+				meta.Version = int32(last_read_ver);
+			}
+
 			//set it since we dont care about the version.
 
 			err = fs.Write_meta(filename, meta)
+			if err == go_zk.ErrBadVersion {
+				fmt.Printf("V")
+				continue
+			}
 			if err != nil {
 				log.Println("Write_meta Failed :", err)
 				return -1
@@ -512,30 +492,35 @@ func (c *Config) _rand_rw_bench() int64 {
 
 		} else if op == 'r' {
 
-			if ((i > 0 && rw_arr[i-1] != 'r') || (i == 0)){
+			if ((i > 0 && rw_arr[i-1] != 'r') ||
+			    (i == 0) || (lock_again_count == 0)) {
 				err = fs.Read_lock(filename)
 				if err != nil {
 					log.Println("Read_lock Failed :", err)
 					return -1
 				}
+				lock_again_count++
 			}
 
 
-			_, err := fs.Read_op(filename,
+			ver, _, err := fs.Read_op(filename,
 						[]string{"grep -i hello ", " "})
 			if err != nil {
 				log.Println("Read_op failed: ", err)
 				return -1
 			}
-			//last_read_ver = meta.Version
+			last_read_ver = ver
+			fmt.Printf("%d",ver)
 
 			if ((i+1 < c.BENCH_LOOP_LEN && rw_arr[i+1] != 'r') ||
-			    (i == c.BENCH_LOOP_LEN)) {
+			    (i == c.BENCH_LOOP_LEN) ||
+			    (lock_again_count >= 5)) {
 				err = fs.Read_unlock(filename)
 				if err != nil {
 					log.Println("Read_lock Failed :", err)
 					return -1
 				}
+				lock_again_count = 0
 			}
 		}
 	}
@@ -546,7 +531,6 @@ func (c *Config) _rand_rw_bench() int64 {
 
 func (c* Config) get_system_stats() string {
 
-	time.Sleep(time.Duration(c.Periodic_ms)*time.Millisecond)
 	data := ""
 	for _, op := range c.Sys_op_arr {
 		cmd := exec.Command("sh", "-c", op)
@@ -561,4 +545,47 @@ func (c* Config) get_system_stats() string {
 	return data
 }
 
+// TODO: complete the function
+func (c *Config) sys_log_bench() {
 
+	last_read_ver := int32(-1)
+	for {
+		log.Println("--- Wait for", c.Periodic_ms, "Milliseconds ---")
+		time.Sleep(time.Duration(c.Periodic_ms)*time.Millisecond)
+
+		var err error
+		filename := "client_rw_bench"
+
+		fs, err := nwfslib.Open(filename, c.Zk_servers, c.Back_servers,
+				    c.Locking)
+		if err != nil {
+			log.Println("Open failed :", err)
+			return
+		}
+		defer fs.Close()
+
+		if c.Push_sys_out {
+			sys_out := c.get_system_stats()
+
+			meta, err := fs.Write(filename, []byte(sys_out))
+			if err != nil {
+				log.Println("Write Failed :", err)
+				return
+			}
+
+			if c.Ignore_Version {
+				meta.Version = -1
+			} else {
+				meta.Version = last_read_ver
+			}
+			//set it since we dont care about the version.
+
+			err = fs.Write_meta(filename, meta)
+			if err != nil {
+				log.Println("Write_meta Failed :", err)
+				return
+			}
+		} else { //keep reading
+		}
+	}
+}

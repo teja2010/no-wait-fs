@@ -27,16 +27,17 @@ func Create_no_lock_res(filepath string, zk *go_zk.Conn) (string, error) {
 	return nl, err
 }
 
-func (fnl *fs_client_nolock) Read_op(filename string, op []string) (string, error) {
+func (fnl *fs_client_nolock) Read_op(filename string, op []string) (int32, string, error) {
 
 	zk := fnl.zk_conn
 	path := "/" + filename + "/nolock_data"
-	meta_bytes, _, err := zk.Get(path)
+	meta_bytes, stat, err := zk.Get(path)
 	if err != nil {
-		return "", err
+		return -1, "", err
 	}
 
-	return Read_op(meta_bytes, op)
+	out, err := Read_op(meta_bytes, op)
+	return stat.Version, out, err
 }
 func (fnl *fs_client_nolock) Write(filename string, contents []byte) (*Metadata, error) {
 	return Write_shards(filename, contents, fnl.backends)
@@ -54,11 +55,15 @@ func (fnl *fs_client_nolock) Write_meta(filename string, meta *Metadata) error {
 	}
 
 	path := "/" + filename + "/nolock_data"
-	_, err = zk.Set(path, meta_bytes, -1)
+	_, err = zk.Set(path, meta_bytes, meta.Version)
 
-	if err != nil {
+	if err == go_zk.ErrNoNode {
 		_, err = zk.Create(path, meta_bytes, 0,
 				   go_zk.WorldACL(go_zk.PermAll))
+
+		if err == go_zk.ErrNodeExists {
+			err = nil
+		}
 	}
 	
 	if err != nil {

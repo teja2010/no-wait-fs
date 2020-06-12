@@ -1,6 +1,7 @@
 package zk_rculib
 
 import (
+	"fmt"
 	"log"
 	"errors"
 	"strconv"
@@ -19,13 +20,14 @@ type Zk_RCU_res interface {
 	Read_lock() error
 	Read_unlock() error
 	Assign(version int32, metadata []byte) error
-	Dereference() ([]byte, error)
+	Dereference() (int32, []byte, error)
 }
 
 type rcu_data struct {
 	resource_name string // name of the resource protected by RCU
 	Zk *go_zk.Conn
 	rlock_file string
+	read_version int32
 	wlock *go_zk.Lock
 	//wchan chan int
 }
@@ -161,6 +163,7 @@ func (zk_rcu *rcu_data) Read_lock() error {
 	if VERBOSE_LOGS {
 		log.Println("Lock acquired: ", zk_rcu.rlock_file)
 	}
+	zk_rcu.read_version = int32(latest)
 
 	return nil
 }
@@ -184,6 +187,7 @@ func (zk_rcu *rcu_data) Read_unlock() error {
 	}
 
 	zk_rcu.rlock_file = ""
+	zk_rcu.read_version = 0
 
 
 	return err
@@ -209,7 +213,8 @@ func (zk_rcu *rcu_data) Assign(version int32, metadata []byte) error {
 		latest, _ := latest_version(children)
 
 		if int32(latest) != version {
-			return errors.New("Mismatching versions")
+			fmt.Printf("(%d != %d)", latest, version)
+			return go_zk.ErrBadVersion
 		}
 	}
 
@@ -228,22 +233,23 @@ func (zk_rcu *rcu_data) Assign(version int32, metadata []byte) error {
 	return nil
 }
 
-func (zk_rcu *rcu_data) Dereference() ([]byte, error) {
+func (zk_rcu *rcu_data) Dereference() (int32, []byte, error) {
 	zk := zk_rcu.Zk
 	if zk_rcu.rlock_file == "" {
-		return nil, errors.New("Dereference outside read_lock protection")
+		return -1, nil, errors.New("Dereference outside read_lock protection")
 	}
 
 	idx := strings.LastIndex(zk_rcu.rlock_file, "/readlock")
 	metadata, _, err := zk.Get(zk_rcu.rlock_file[:idx])
 	if err != nil {
-		return nil, err
+		return -1, nil, err
 	}
 	if VERBOSE_LOGS {
 		log.Println("Dereferenced", zk_rcu.rlock_file[:idx],
 			    ", Metadata", metadata)
 	}
-	return metadata, nil
+
+	return zk_rcu.read_version, metadata, nil
 }
 
 func (zk_rcu *rcu_data) writer_lock() error {

@@ -37,10 +37,23 @@ func Create_RWLock(filepath string, zk *go_zk.Conn) (Zk_RWLock, error) {
 
 func (rw *rwlock) ReadLock() error {
 	if rw.lock_file != "" {
-		return errors.New("Deadlock: lock acquired: " + rw.lock_file);
+		log.Println("Deadlock: lock acquired: " + rw.lock_file);
+		return go_zk.ErrDeadlock
 	}
 	var err error
 	zk := rw.Zk
+
+	exists, _, err := zk.Exists("/" + rw.path)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		_, err = zk.Create("/" + rw.path, []byte{}, 0,
+					go_zk.WorldACL(go_zk.PermAll))
+		if err != nil && err != go_zk.ErrNodeExists {
+			return err
+		}
+	}
 
 	rw.lock_file , err = zk.Create("/" + rw.path + "/reader", []byte{},
 					go_zk.FlagSequence | go_zk.FlagEphemeral,
@@ -62,6 +75,10 @@ func (rw *rwlock) ReadLock() error {
 }
 
 func (rw *rwlock) ReadUnlock() error {
+	if rw.lock_file == "" {
+		log.Println("Lock not acquired")
+		return go_zk.ErrNotLocked
+	}
 
 	zk := rw.Zk
 	err := zk.Delete(rw.lock_file, -1)
@@ -69,6 +86,11 @@ func (rw *rwlock) ReadUnlock() error {
 	return err
 }
 func (rw *rwlock) WriteLock() error {
+	if rw.lock_file != "" {
+		log.Println("Deadlock: lock acquired: " + rw.lock_file);
+		return go_zk.ErrDeadlock
+	}
+
 	zk := rw.Zk
 
 	var err error
@@ -97,6 +119,11 @@ func (rw *rwlock) WriteLock() error {
 }
 
 func (rw *rwlock) WriteUnlock() error {
+	if rw.lock_file == "" {
+		log.Println("Lock not acquired")
+		return go_zk.ErrNotLocked
+	}
+
 	zk := rw.Zk
 	err := zk.Delete(rw.lock_file, -1)
 	rw.lock_file = ""

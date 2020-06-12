@@ -18,8 +18,12 @@ func Create_single_lock_res(filepath string, zk *go_zk.Conn) (*go_zk.Lock, error
 
 	_, err := zk.Create("/"+filepath, []byte{},
 			    0, go_zk.WorldACL(go_zk.PermAll))
-	if err != nil {
-		log.Println("Create_single_lock_res: error:",err);
+	if err == go_zk.ErrNodeExists {
+		if VERBOSE_LOGS {
+			log.Println("Node","/"+filepath ,"exists");
+		}
+	} else if err != nil {
+		return nil, err
 	}
 
 	lock := go_zk.NewLock(zk, "/"+filepath+"/singlelock",
@@ -28,17 +32,18 @@ func Create_single_lock_res(filepath string, zk *go_zk.Conn) (*go_zk.Lock, error
 	return lock, nil
 }
 
-func (fsl *fs_client_singleLock) Read_op(filename string, op []string) (string, error) {
+func (fsl *fs_client_singleLock) Read_op(filename string, op []string) (int32, string, error) {
 	fsl.lock.Lock()
 	zk := fsl.zk_conn
 
 	path := "/" + filename + "/singlelock_data"
-	meta_bytes, _, err := zk.Get(path)
+	meta_bytes, stat, err := zk.Get(path)
 	if err != nil {
-		return "", err
+		return -1, "", err
 	}
+	out, err := Read_op(meta_bytes, op)
 
-	return Read_op(meta_bytes, op)
+	return stat.Version, out, err
 }
 
 func (fsl *fs_client_singleLock) Write(filename string, contents []byte) (*Metadata, error) {
@@ -57,9 +62,9 @@ func (fsl *fs_client_singleLock) Write_meta(filename string, meta *Metadata) err
 	}
 
 	path := "/" + filename + "/singlelock_data"
-	_, err = zk.Set(path, meta_bytes, -1)
+	_, err = zk.Set(path, meta_bytes, meta.Version)
 
-	if err != nil {
+	if err == go_zk.ErrNoNode {
 		_, err = zk.Create(path, meta_bytes, 0,
 				   go_zk.WorldACL(go_zk.PermAll))
 	}

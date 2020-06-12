@@ -10,13 +10,14 @@ import (
 	"encoding/json"
 )
 
-func (f *fs_client_rcu) Read_op(filename string, op []string) (string, error) {
-	meta_bytes, err := f.zk_rcu.Dereference()
+func (f *fs_client_rcu) Read_op(filename string, op []string) (int32, string, error) {
+	ver, meta_bytes, err := f.zk_rcu.Dereference()
 	if err != nil {
-		return "", err
+		return -1, "", err
 	}
+	out, err := Read_op(meta_bytes, op)
 
-	return Read_op(meta_bytes, op)
+	return ver, out, err
 }
 
 func (f *fs_client_rcu) Write(filename string, contents []byte ) (*Metadata, error) {

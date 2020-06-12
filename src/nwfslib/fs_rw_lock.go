@@ -19,23 +19,28 @@ func Create_rw_lock_res(filepath string, zk *go_zk.Conn) (zk_rwllib.Zk_RWLock, e
 	_, err := zk.Create("/"+filepath, []byte{},
 			    0, go_zk.WorldACL(go_zk.PermAll))
 
-	if err != nil {
+	if err == go_zk.ErrNodeExists {
+		if VERBOSE_LOGS {
+			log.Println("Node exists")
+		}
+	} else if err != nil {
 		log.Println("Create_rw_lock_res err:", err)
 	}
 
-	rwl, err := zk_rwllib.Create_RWLock(filepath, zk)
+	rwl, err := zk_rwllib.Create_RWLock(filepath+"/rwlock", zk)
 
 	return rwl, err;
 }
 
-func (frwl *fs_client_rwlock) Read_op(filename string, op []string) (string, error) {
+func (frwl *fs_client_rwlock) Read_op(filename string, op []string) (int32, string, error) {
 	zk := frwl.zk_conn
-	meta_bytes, _, err := zk.Get("/"+filename)
+	meta_bytes, stat, err := zk.Get("/"+filename)
 	if err != nil {
-		return "", err
+		return -1, "", err
 	}
+	out, err := Read_op(meta_bytes, op)
 
-	return Read_op(meta_bytes, op)
+	return stat.Version, out, err
 }
 
 func (frwl *fs_client_rwlock) Write(filename string, contents []byte) (*Metadata, error) {
