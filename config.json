@@ -3,8 +3,9 @@
 	"Back_servers" : ["127.0.0.1:7000", "127.0.0.1:8000"],
 
 	"Read_prob" : 0.1,
+	"Read_hold_prob" : 0.7,
 	"Threads_num" : 4,
-	"BENCH_LOOP_LEN" : 200,
+	"BENCH_LOOP_LEN" : 500,
 	"Ignore_Version" : false,
 
 	"Locking" : "RCU",
@@ -22,8 +23,8 @@
 	"Test_hello" :           false,
 	"Test_benchmark_reads" : false,
 	"Test_backend_bench" :   false,
-	"Test_zk_bench" :        true,
-	"Test_rand_rw_bench" :   false,
+	"Test_zk_bench" :        false,
+	"Test_rand_rw_bench" :   true,
 	"Push_sys_out": false,
 
 	"IGNORE": "------------------------------------------------",

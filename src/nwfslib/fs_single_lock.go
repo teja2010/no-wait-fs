@@ -82,7 +82,9 @@ func (fsl *fs_client_singleLock) Write_meta(filename string, meta *Metadata) err
 	}
 	
 	if err != nil {
-		log.Println("Write_meta: failed", err)
+		if VERBOSE_LOGS {
+			log.Println("Write_meta: failed", err)
+		}
 		return err
 	}
 	return nil

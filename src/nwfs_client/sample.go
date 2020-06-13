@@ -93,6 +93,10 @@ func (c *Config) App_Text_Processing() {
 						wordmap[wrong_word] + "/g "
 			ver, meta, err = fs.Write_op(text_file,
 						     []string{sed_cmd, " "})
+			if err != nil {
+				log.Println("Write_op failed")
+				return
+			}
 			meta.Version = ver
 		}
 

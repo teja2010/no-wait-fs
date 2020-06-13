@@ -27,6 +27,7 @@ type Config struct {
 	Back_servers []string
 	Periodic_ms int
 	Read_prob float32
+	Read_hold_prob float32
 	Threads_num int
 	Locking string
 	BENCH_LOOP_LEN int
@@ -112,20 +113,22 @@ func main() {
 		return
 	}
 	if config.Test_rand_rw_bench {
-		res := make(chan int64, config.Threads_num)
+		res := make(chan rw_data, config.Threads_num)
 
 		for i:=0; i< config.Threads_num; i++ {
 			go config.rand_rw_bench(res)
 		}
 
 		var avg int64
+		var con int
 		count := int64(0)
 		for i:=0; i< config.Threads_num; i++ {
 			temp := <-res
-			if temp <= 0 {
+			if temp.time <= 0 {
 				continue
 			}
-			avg += temp
+			avg += temp.time
+			con += temp.conflicts
 			count++
 		}
 		avg = avg/count
@@ -136,6 +139,7 @@ func main() {
 			log.Println("Random RW: ", avg_time, "/",
 					config.BENCH_LOOP_LEN, " iters,",
 					count, "threads")
+			log.Println("         :", con, "conflicts")
 		}
 		return
 	}
@@ -217,7 +221,7 @@ func (c* Config) backend_bench() {
 
 		var err error
 		meta, err = nwfslib.Write_shards(filename,
-					[]byte(c.get_system_stats()),
+					[]byte(hello_lyrics),
 					c.Back_servers)
 		if err != nil {
 			log.Println("Read_op err: ", err)
@@ -421,10 +425,14 @@ func (c *Config) read_bench() {
 
 }
 
-func (c *Config) rand_rw_bench(result chan int64) {
+type rw_data struct {
+	time int64
+	conflicts int
+}
+func (c *Config) rand_rw_bench(result chan rw_data) {
 	result <- c._rand_rw_bench()
 }
-func (c *Config) _rand_rw_bench() int64 {
+func (c *Config) _rand_rw_bench() rw_data {
 	var err error
 	filename := "client_rw_bench_" + c.Locking
 
@@ -432,7 +440,7 @@ func (c *Config) _rand_rw_bench() int64 {
 			    c.Locking)
 	if err != nil {
 		log.Println("Open failed :", err)
-		return -1
+		return rw_data{-1, -1}
 	}
 	defer fs.Close()
 	last_read_ver := int32(-1)
@@ -454,6 +462,7 @@ func (c *Config) _rand_rw_bench() int64 {
 
 	log.Println("Reads", reads, "Writes", writes, "arr", rw_arr, len(rw_arr));
 
+	conflicts := 0
 	start := time.Now()
 	for i, op := range rw_arr {
 		fmt.Printf("%c",op)
@@ -465,7 +474,7 @@ func (c *Config) _rand_rw_bench() int64 {
 			meta, err := fs.Write(filename, []byte(hello_lyrics))
 			if err != nil {
 				log.Println("Write Failed :", err)
-				return -1
+				return rw_data{-1, -1}
 			}
 
 			if c.Ignore_Version {
@@ -479,11 +488,12 @@ func (c *Config) _rand_rw_bench() int64 {
 			err = fs.Write_meta(filename, meta)
 			if err == go_zk.ErrBadVersion {
 				fmt.Printf("V")
+				conflicts++
 				continue
 			}
 			if err != nil {
 				log.Println("Write_meta Failed :", err)
-				return -1
+				return rw_data{-1, -1}
 			}
 
 		} else if op == 'r' {
@@ -493,7 +503,7 @@ func (c *Config) _rand_rw_bench() int64 {
 				err = fs.Read_lock(filename)
 				if err != nil {
 					log.Println("Read_lock Failed :", err)
-					return -1
+					return rw_data{-1, -1}
 				}
 				lock_again_count++
 			}
@@ -503,18 +513,18 @@ func (c *Config) _rand_rw_bench() int64 {
 						[]string{"grep -i hello ", " "})
 			if err != nil {
 				log.Println("Read_op failed: ", err)
-				return -1
+				return rw_data{-1, -1}
 			}
 			last_read_ver = ver
 			fmt.Printf("%d",ver)
 
 			if ((i+1 < c.BENCH_LOOP_LEN && rw_arr[i+1] != 'r') ||
 			    (i == c.BENCH_LOOP_LEN) ||
-			    (lock_again_count >= 5)) {
+			    (rand.Float32() < c.Read_hold_prob)) {
 				err = fs.Read_unlock(filename)
 				if err != nil {
 					log.Println("Read_lock Failed :", err)
-					return -1
+					return rw_data{-1, -1}
 				}
 				lock_again_count = 0
 			}
@@ -522,7 +532,7 @@ func (c *Config) _rand_rw_bench() int64 {
 	}
 	elapsed := time.Now().Sub(start)
 	//log.Println("Random RW:", elapsed, "/", c.BENCH_LOOP_LEN, " iters")
-	return elapsed.Microseconds()
+	return rw_data{elapsed.Microseconds(), conflicts}
 }
 
 func (c* Config) get_system_stats() string {
