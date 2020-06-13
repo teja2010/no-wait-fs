@@ -87,15 +87,16 @@ func (c *Config) App_Text_Processing() {
 
 		//log.Printf("<%s>\n",grep_out)
 
-		var sed_out string
+		var meta *nwfslib.Metadata
 		if len(grep_out) > 0 {
 			sed_cmd := "sed s/"+wrong_word+"/"+
-					wordmap[wrong_word] + "/g "
-			ver, sed_out, err = fs.Read_op(text_file,
-					[]string{sed_cmd, " "})
+						wordmap[wrong_word] + "/g "
+			ver, meta, err = fs.Write_op(text_file,
+						     []string{sed_cmd, " "})
+			meta.Version = ver
 		}
 
-		err := fs.Read_unlock(text_file)
+		err = fs.Read_unlock(text_file)
 		if err != nil {
 			log.Println("Read_lock failed :", err)
 			return
@@ -107,13 +108,6 @@ func (c *Config) App_Text_Processing() {
 			continue
 		}
 
-		meta, err := fs.Write(text_file, []byte(sed_out))
-		if err != nil {
-			log.Println("Write failed: ", err)
-			return
-		}
-
-		meta.Version = ver
 		err = fs.Write_meta(text_file, meta)
 		if err == go_zk.ErrBadVersion {
 			log.Println(err)

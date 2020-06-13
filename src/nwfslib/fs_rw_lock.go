@@ -59,7 +59,10 @@ func (frwl *fs_client_rwlock) Write(filename string, contents []byte) (*Metadata
 }
 
 func (frwl *fs_client_rwlock) Write_meta(filename string, meta *Metadata) error {
-	frwl.rwl.WriteLock()
+	err := frwl.rwl.WriteLock()
+	if err != nil {
+		return err
+	}
 	defer frwl.rwl.WriteUnlock()
 
 	meta_bytes, err := json.Marshal(meta)

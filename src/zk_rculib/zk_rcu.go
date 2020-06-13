@@ -60,7 +60,7 @@ func Create_RCU_resource(resource_name string,
 	zk_rcu.resource_name = resource_name
 	zk_rcu.Zk = zk
 	zk_rcu.wlock = go_zk.NewLock(zk,
-					 "/"+resource_name+"/writelock",
+					 "/"+resource_name+"/RCUwritelock",
 					 go_zk.WorldACL(go_zk.PermAll))
 
 	res_exists, _, err := zk.Exists("/"+resource_name)
@@ -80,7 +80,7 @@ func Create_RCU_resource(resource_name string,
 				      Acl: go_zk.WorldACL(go_zk.PermAll),
 				      Flags: 0 },
 
-		&go_zk.CreateRequest{ Path: "/" + resource_name + "/writelock",
+		&go_zk.CreateRequest{ Path: "/" + resource_name + "/RCUwritelock",
 				      Data: []byte{},
 				      Acl: go_zk.WorldACL(go_zk.PermAll),
 				      Flags: 0 },
@@ -130,7 +130,8 @@ func Create_RCU_resource(resource_name string,
 
 func (zk_rcu *rcu_data) Read_lock() error {
 	if zk_rcu.rlock_file != "" {
-		return errors.New("Deadlock: lock acquired: " + zk_rcu.rlock_file)
+		log.Println("Deadlock: lock acquired: " + zk_rcu.rlock_file)
+		return go_zk.ErrDeadlock
 	}
 
 	zk := zk_rcu.Zk
@@ -159,6 +160,16 @@ func (zk_rcu *rcu_data) Read_lock() error {
 		zk_rcu.rlock_file = ""
 		return err
 	}
+
+	// not needed since delete can only delete empty folder
+	//exists, _, err := zk.Exists(zk_rcu.rlock_file)
+	//if err != nil {
+	//	return err
+	//}
+	//if !exists {
+	//	log.Println("Error: Path was deleted")
+	//	return go_zk.ErrNoNode
+	//}
 
 	if VERBOSE_LOGS {
 		log.Println("Lock acquired: ", zk_rcu.rlock_file)
@@ -257,7 +268,6 @@ func (zk_rcu *rcu_data) writer_lock() error {
 	err := zk_rcu.wlock.Lock()
 	return err
 
-	//go zk_rcu.rcu_gc()
 
 }
 
@@ -267,25 +277,65 @@ func (zk_rcu *rcu_data) writer_unlock() error {
 	return zk_rcu.wlock.Unlock()
 }
 
-//func (zk_rcu *rcu_data) rcu_gc() {
-//	defer func (){ 0->zk_rcu.wchan }()
-//
-//	children, _, err := zk.Children("/" + zk_rcu.resource_name)
-//	if err != nil {
-//		return err
-//	}
-//	latest, lstr := latest_version(children)
-//
-//	for _, ch := range children {
-//		if ch == lstr {
-//			continue
-//		}
-//
-//		children, _, err := zk.Children("/" + zk_rcu.resource_name+
-//						"/" + ch)
-//		if len(ch) == 0 {
-//			_ = zk.Delete(temp, -1)
-//		}
-//	}
-//
-//}
+// returns error ONLY for connection issues
+func Rcu_gc(zk *go_zk.Conn) error {
+	log.Println("GC start")
+	children, _, err := zk.Children("/")
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+
+	for _, ch := range children {
+		exists, _, err := zk.Exists("/" + ch + "/RCUwritelock")
+		if err != nil {
+			return err
+		}
+		if !exists {
+			continue
+		}
+
+		// ok found a RCU node
+
+		gc_cleanup("/"+ch, zk)
+	}
+	log.Println("GC Complete")
+	return nil
+}
+
+func gc_cleanup(path string, zk *go_zk.Conn) {
+
+	//log.Println("cleanup", path)
+	children, _, err := zk.Children(path)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+
+	_, lstr := latest_version(children)
+	lstr = "version" + lstr
+
+	count := 0
+	for _, ch := range children {
+		if len(ch) < 7 || ch[:7] != "version" || ch == lstr {
+			continue
+		}
+
+		childpath := path+"/"+ch
+		_, stat, err := zk.Exists(childpath)
+		if err != nil {
+			log.Println(err)
+			return
+		}
+
+		if stat.NumChildren == 0 {
+			log.Println("Delete ", childpath)
+			_ = zk.Delete(childpath, stat.Version)
+			count++
+		}
+	}
+	//if count > 0 {
+	//	log.Println("Cleaned", count)
+	//}
+}
+

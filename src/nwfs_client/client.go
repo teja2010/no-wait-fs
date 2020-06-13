@@ -41,6 +41,7 @@ type Config struct {
 	Test_hello bool
 	Test_benchmark_reads bool
 	Test_backend_bench bool
+	Test_zk_bench bool
 	Test_rand_rw_bench bool
 	Test_sys_logs bool
 
@@ -104,6 +105,10 @@ func main() {
 	}
 	if config.Test_backend_bench {
 		config.backend_bench()
+		return
+	}
+	if config.Test_zk_bench {
+		config.zk_bench()
 		return
 	}
 	if config.Test_rand_rw_bench {
@@ -579,4 +584,84 @@ func (c *Config) sys_log_bench() {
 		} else { //keep reading
 		}
 	}
+}
+
+func (c *Config) zk_bench() {
+	zk, _, err := go_zk.Connect(c.Zk_servers, 3*time.Second)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+	root := "/clientdir_zk_bench"
+
+	_ , err = zk.Create(root, []byte{},
+					0, go_zk.WorldACL(go_zk.PermAll))
+	if err != nil {
+		log.Println(err)
+		return
+	}
+
+	start := time.Now()
+	for i:=0; i< c.BENCH_LOOP_LEN; i++ {
+		fmt.Printf(".")
+		_,err := zk.Create(root+"/v", []byte{},
+					go_zk.FlagSequence | go_zk.FlagEphemeral,
+					go_zk.WorldACL(go_zk.PermAll))
+		if err != nil {
+			log.Println(err)
+			break
+		}
+	}
+	fmt.Printf("\n")
+	elapsed := time.Now().Sub(start)
+	log.Println("Zk bench Create", elapsed, "/", c.BENCH_LOOP_LEN, " iters")
+
+	start = time.Now()
+	for i:=0; i< c.BENCH_LOOP_LEN; i++ {
+		fmt.Printf(".")
+		_,_,err := zk.Get(root)
+		if err != nil {
+			log.Println(err)
+			break
+		}
+	}
+	fmt.Printf("\n")
+	elapsed = time.Now().Sub(start)
+	log.Println("Zk bench Get", elapsed, "/", c.BENCH_LOOP_LEN, " iters")
+
+	start = time.Now()
+	for i:=0; i< c.BENCH_LOOP_LEN; i++ {
+		fmt.Printf(".")
+		_, err := zk.Set(root, []byte{}, -1)
+		if err != nil {
+			log.Println(err)
+			break
+		}
+	}
+	fmt.Printf("\n")
+	elapsed = time.Now().Sub(start)
+	log.Println("Zk bench Set", elapsed, "/", c.BENCH_LOOP_LEN, " iters")
+
+
+	ch,_, err := zk.Children(root)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+
+	start = time.Now()
+	for _, c := range ch {
+		fmt.Printf(".")
+		err := zk.Delete(root+"/"+c, -1)
+		if err != nil {
+			log.Println(err)
+			break
+		}
+	}
+	fmt.Printf("\n")
+	elapsed = time.Now().Sub(start)
+	log.Println("Zk bench Delete", elapsed, "/", c.BENCH_LOOP_LEN, " iters")
+	_ = zk.Delete(root, -1)
+
+	zk.Close()
 }

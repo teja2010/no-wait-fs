@@ -5,13 +5,22 @@ import (
 	"fmt"
 	"net"
 	"log"
+	"time"
 	"errors"
 	"os/exec"
 	"net/rpc"
 	"net/http"
+	"math/rand"
 	"nwfslib"
 	"io/ioutil"
+	"zk_rculib"
+	"encoding/json"
+	go_zk "github.com/samuel/go-zookeeper/zk"
 )
+
+type Config struct {
+	Zk_servers []string
+}
 
 const (
 	VERBOSE_LOGS = false
@@ -19,17 +28,64 @@ const (
 )
 
 func print_help() {
-	fmt.Println("Usage: nwfs_back <port>")
+	fmt.Println("Usage: nwfs_back <port> <config>")
+}
+
+func read_config(filename string) Config {
+	jd, err := os.Open(filename)
+	if err != nil {
+		log.Println("Open error", err)
+		os.Exit(1)
+	}
+	defer jd.Close()
+
+	jsonData, err := ioutil.ReadAll(jd)
+	if err != nil {
+		log.Println("Readall error", err)
+		os.Exit(1)
+	}
+
+	var config Config
+	err = json.Unmarshal(jsonData, &config)
+	if err != nil {
+		log.Println("Config unmarshall failed", err)
+		os.Exit(1)
+	}
+
+	log.Printf("config: %+v\n", config)
+
+	return config
+}
+
+func rcu_gc(Zk_servers []string) {
+	zk, _, err := go_zk.Connect(Zk_servers, 3*time.Second)
+
+	for err == nil {
+		time.Sleep(time.Duration(5+rand.Intn(5))*time.Second)
+		err = zk_rculib.Rcu_gc(zk)
+	}
+
+	log.Println("Zk Connection failed", err)
+	time.Sleep(3*time.Second)
+	go rcu_gc(Zk_servers)
+	return
 }
 
 func main() {
 	args := os.Args[1:]
 
-	if len(args) != 1 {
+	if len(args) != 2 {
 		print_help()
 		os.Exit(1)
 	}
 	port := args[0]
+
+	rand.Seed(time.Now().UnixNano())
+	log.SetFlags(log.LstdFlags|log.Lshortfile)
+	c := read_config(args[1])
+
+	go rcu_gc(c.Zk_servers)
+
 	n := new(nwfs)
 
 	n.prefix = "shards_"+port+"/"

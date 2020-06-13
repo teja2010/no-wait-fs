@@ -31,6 +31,11 @@ func Create_RWLock(filepath string, zk *go_zk.Conn) (Zk_RWLock, error) {
 	rw.Zk = zk
 
 	log.Println("Created rwlock at ", filepath)
+	_, err := zk.Create("/" + rw.path, []byte{}, 0,
+				go_zk.WorldACL(go_zk.PermAll))
+	if err != nil && err != go_zk.ErrNodeExists {
+		return nil, err
+	}
 
 	return rw, nil
 }
@@ -43,24 +48,13 @@ func (rw *rwlock) ReadLock() error {
 	var err error
 	zk := rw.Zk
 
-	exists, _, err := zk.Exists("/" + rw.path)
-	if err != nil {
-		return err
-	}
-	if !exists {
-		_, err = zk.Create("/" + rw.path, []byte{}, 0,
-					go_zk.WorldACL(go_zk.PermAll))
-		if err != nil && err != go_zk.ErrNodeExists {
-			return err
-		}
-	}
-
 	rw.lock_file , err = zk.Create("/" + rw.path + "/reader", []byte{},
 					go_zk.FlagSequence | go_zk.FlagEphemeral,
 					go_zk.WorldACL(go_zk.PermAll))
 	if err != nil {
 		return err
 	}
+
 
 	splits := strings.Split(rw.lock_file, "/")
 	lk_filename := splits[len(splits)-1]
