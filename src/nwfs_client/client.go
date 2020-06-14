@@ -155,27 +155,28 @@ func main() {
 
 
 	if config.Sample_Text_Processing {
-		ch := make(chan int64, config.Threads_num)
-		conflicts := int64(0)
-		corrections := int64(0)
+		ch := make(chan App_data, config.Threads_num)
+		conflicts := 0
+		corrections := 0
 		failed := 0
 		start := time.Now()
 		for i:=0; i<config.Threads_num; i++ {
 			go config.App_Text_Processing(i, ch)
 		}
 		for i:=0; i<config.Threads_num; i++ {
-			c := <-ch
-			if c < 0 {
+			ad := <-ch
+			if ad.conflicts < 0 {
 				failed++
 			} else {
-				conflicts   += (c & 0xffff)
-				corrections += (c >> 32)
+				conflicts   += ad.conflicts
+				corrections += ad.corrections
 			}
 		}
 		elapsed := time.Now().Sub(start)
 
 		log.Println("Text App conflicts:", conflicts,
-					"corrections:", corrections)
+					"corrections:", corrections,
+					"failed", failed)
 		log.Println("Total Elapsed Time", elapsed)
 		return
 	}

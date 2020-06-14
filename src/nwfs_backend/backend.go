@@ -189,7 +189,7 @@ func (n *nwfs) Read_op(args *ReadArgs, op_output *string) error {
 		return err
 	}
 	if !exists {
-		log.Println("Read_op failed, file does not exist")
+		//log.Println("Read_op failed, file does not exist")
 		return errors.New("File does not exist")
 	}
 
@@ -208,7 +208,7 @@ func (n *nwfs) Read_op(args *ReadArgs, op_output *string) error {
 	// TODO: check if command ran but failed OR
 	//       the command did not run
 	if err != nil {
-		log.Println("Read_op failed", err)
+		//log.Println("Read_op failed", err)
 		return nil
 	}
 

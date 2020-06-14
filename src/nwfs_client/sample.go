@@ -52,11 +52,17 @@ func (c *Config) Push_data(filepath, name string) {
 }
 
 
-func (c *Config) App_Text_Processing(tid int, ch chan int64) {
+type App_data struct {
+	corrections int
+	conflicts int
+}
+func (c *Config) App_Text_Processing(tid int, ch chan App_data) {
 
+	fail := App_data{-1,-1}
+	ad := App_data{0, 0}
 	if tid > c.Threads_num {
 		log.Println("TID too large")
-		ch<- (-1)
+		ch<- fail
 		return
 	}
 
@@ -67,22 +73,21 @@ func (c *Config) App_Text_Processing(tid int, ch chan int64) {
 			    c.Locking)
 	if err != nil {
 		log.Println("Open failed", err)
-		ch<- (-1)
+		ch<- fail
 		return
 	}
 	defer fs.Close()
 
 	// check if a word is found in the file.
 
-	corrections := int64(0)
-	conflicts := int64(0)
+	//corrections := int64(0)
+	//conflicts := int64(0)
 	ver := int32(-1)
-	for len(wordmap) > 0 { //stuck here till wordmap is empty
 	for wrong_word := range wordmap {
 		err = fs.Read_lock(text_file)
 		if err != nil {
 			log.Println("Read_lock failed :", err)
-			ch<- (-1)
+			ch<- fail
 			return
 		}
 
@@ -91,56 +96,68 @@ func (c *Config) App_Text_Processing(tid int, ch chan int64) {
 					[]string{"grep -i "+wrong_word+" ", " "})
 		if err != nil {
 			log.Println("Read_op failed: ", err)
-			ch<- (-1)
+			ch<- fail
+			return
+		}
+
+		err = fs.Read_unlock(text_file)
+		if err != nil {
+			log.Println("Read_unlock failed :", err)
+			ch<- fail
 			return
 		}
 
 		//log.Printf("<%s>\n",grep_out)
+		if len(grep_out) == 0 || grep_out[0] == '0' {
+			log.Println("Did not find", wrong_word)
+			//delete(wordmap, wrong_word)
+			continue
+		}
 
-		var meta *nwfslib.Metadata
-		if len(grep_out) > 0 {
+		for {
+			err = fs.Read_lock(text_file)
+			if err != nil {
+				log.Println("Read_lock failed :", err)
+				ch<- fail
+				return
+			}
+			var meta *nwfslib.Metadata
 			sed_cmd := "sed s/"+wrong_word+"/"+
 						wordmap[wrong_word] + "/g "
 			ver, meta, err = fs.Write_op(text_file,
 						     []string{sed_cmd, " "})
 			if err != nil {
 				log.Println("Write_op failed")
+				ch<- fail
 				return
 			}
 			meta.Version = ver
-		}
+			err = fs.Read_unlock(text_file)
+			if err != nil {
+				log.Println("Read_unlock failed :", err)
+				ch<- fail
+				return
+			}
 
-		err = fs.Read_unlock(text_file)
-		if err != nil {
-			log.Println("Read_lock failed :", err)
-			ch<- (-1)
-			return
-		}
+			err = fs.Write_meta(text_file, meta)
+			if err == go_zk.ErrBadVersion {
+				log.Println(err)
+				ad.conflicts++
+				continue
+			} else if err != nil {
+				log.Println("Write_meta failed", err)
+				ch<- fail
+				return
+			}
 
-		if len(grep_out) == 0 {
-			log.Println("Did not find", wrong_word)
-			delete(wordmap, wrong_word)
-			continue
+			log.Println("Corrected ", wrong_word)
+			//delete(wordmap, wrong_word)
+			ad.corrections++
+			break
 		}
-
-		err = fs.Write_meta(text_file, meta)
-		if err == go_zk.ErrBadVersion {
-			log.Println(err)
-			conflicts++
-			continue
-		} else if err != nil {
-			log.Println("Write_meta failed", err)
-			ch<- (-1)
-			return
-		}
-
-		log.Println("Corrected ", wrong_word)
-		delete(wordmap, wrong_word)
-		corrections++
-	}
 	}
 
-	ch <- ((corrections << 32) & conflicts)
+	ch <- ad
 }
 
 func (c *Config) getWords(tid int) map[string]string {

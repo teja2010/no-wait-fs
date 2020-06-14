@@ -10,7 +10,7 @@ import (
 
 const (
 	NUM_BACK = 1 // Not handling multiple replicas
-	SHARD_SIZE = 8*1024*1024
+	SHARD_SIZE = 1*1024*1024
 	VERBOSE_LOGS = false
 	ENTRY_ARG_LOGS = false
 )
